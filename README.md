@@ -207,12 +207,12 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`,
 | qemus/qemu | `7.50` |
 | Base OS | `Debian 13.8 (13.8-slim)` |
 | Architectures | `linux/amd64, linux/arm64` |
-| Uncompressed size (per arch) | `amd64: 170.8 MB, arm64: 906.4 MB` |
+| Uncompressed size (per arch) | `amd64: 248.2 MB, arm64: 1120.1 MB` |
 | Last verified build (UTC) | `2026-11-27` |
-| Published multi-arch digest | `dgcosenza/fnxvm@sha256:7db21baff914ec70d4a3d9ceb40e20a02ec1cef4d5669bfcc8a181dfa3b9bc30` |
-| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:7db21baff914ec70d4a3d9ceb40e20a02ec1cef4d5669bfcc8a181dfa3b9bc30` |
+| Published multi-arch digest | `dgcosenza/fnxvm@sha256:4e93cd429f4e0a4ab295234ad85fb0c4d2856fd56edabe7e819a629026c6b428` |
+| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:4e93cd429f4e0a4ab295234ad85fb0c4d2856fd56edabe7e819a629026c6b428` |
 | Supply chain | Cosign OIDC signed + SPDX & CycloneDX SBOM attestations + SLSA Build L3 provenance |
-| Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (68 upstream-unfixed C/H) |
+| Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (76 upstream-unfixed C/H) |
 
 **Guest OS versions resolved at last build (resolved dynamically at runtime):**
 
@@ -225,6 +225,13 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`,
 | `debian` | `13.8.0 (GNOME / KDE)` |
 | `ubuntu` | `26.04.1 LTS` |
 | `omarchy` | `4.5.0 (rolling, no LTS)` |
+
+**Recent upstream tracking:**
+- **dockur/windows:** `6.06` -> `6.06`
+- **qemus/qemu:** `7.50` -> `7.50`
+- **Base image:** `debian:13.8-slim` pinned at `sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0`
+- **Go builder:** `golang:1.27.4-trixie` pinned at `sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee`
+- `windows`: `Windows 11 (win11x64, build 26100.4349)`
 <!-- versions:end -->
 
 ## Upgrade / migration

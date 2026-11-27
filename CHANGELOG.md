@@ -22,11 +22,11 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
 
 ---
 
-## [6.06] — 2026-11-27
+## [6.06.2] — 2026-11-27
 
 ### Automated Daily Build
 - Verified components: dockur/windows `6.06`, qemus/qemu `7.50`, Base OS `Debian 13.8 (13.8-slim)`.
-- Verified guest OS resolvers (HTTP 200): windows `Windows 11 (win11x64, build 26100.4349)`, haiku `R1/beta6 (amd64)`, freebsd `15.1-RELEASE`, debian `13.8.0 (GNOME / KDE)`, ubuntu `26.04.1 LTS`, omarchy `4.5.0 (rolling, no LTS)`.
+- Verified guest OS resolvers (HTTP 200): windows `Windows 11 (win11x64, build 26100.4349)`, haiku `R1/beta6 (amd64)`, freebsd `15.1-RELEASE`, daemonarchy `1.5.1 (FreeBSD 16.0-CURRENT, no LTS)`, debian `13.8.0 (GNOME / KDE)`, ubuntu `26.04.1 LTS`, omarchy `4.5.0 (rolling, no LTS)`.
 - Architectures verified: `linux/amd64, linux/arm64` (native QEMU/noVNC smoke tests + Dive efficiency gate).
 - Upstream tracking:
   - **dockur/windows:** `6.06` -> `6.06`
@@ -34,8 +34,8 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
   - **Base image:** `debian:13.8-slim` pinned at `sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0`
   - **Go builder:** `golang:1.27.4-trixie` pinned at `sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee`
   - `windows`: `Windows 11 (win11x64, build 26100.4349)`
-- Vulnerability gate: **0 fixable findings of any severity** in Trivy and Grype (SBOM scan) (68 upstream-unfixed C/H).
-- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:7db21baff914ec70d4a3d9ceb40e20a02ec1cef4d5669bfcc8a181dfa3b9bc30` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
+- Vulnerability gate: **0 fixable findings of any severity** in Trivy and Grype (SBOM scan) (76 upstream-unfixed C/H).
+- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:4e93cd429f4e0a4ab295234ad85fb0c4d2856fd56edabe7e819a629026c6b428` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
 ---
 
 ---

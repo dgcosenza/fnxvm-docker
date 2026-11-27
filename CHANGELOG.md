@@ -43,7 +43,7 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
 
 ---
 
-## [6.06.2] — 2026-11-27
+## [6.06.3] — 2026-11-27
 
 ### Automated Daily Build
 - Verified components: dockur/windows `6.06`, qemus/qemu `7.50`, Base OS `Debian 13.8 (13.8-slim)`.
@@ -56,7 +56,7 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
   - **Go builder:** `golang:1.27.4-trixie` pinned at `sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee`
   - `windows`: `Windows 11 (win11x64, build 26100.4349)`
 - Vulnerability gate: **0 fixable findings of any severity** in Trivy and Grype (SBOM scan) (76 upstream-unfixed C/H).
-- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:4e93cd429f4e0a4ab295234ad85fb0c4d2856fd56edabe7e819a629026c6b428` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
+- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:c0517363be2341c8c8f1418afb6474ce4285a612731015d168bf38cc45e01e94` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
 ---
 
 ---

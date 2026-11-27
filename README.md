@@ -209,10 +209,10 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`)
 | qemus/qemu | `7.50` |
 | Base OS | `Debian 13.8 (13.8-slim)` |
 | Architectures | `linux/amd64, linux/arm64` |
-| Uncompressed size (per arch) | `amd64: 248.2 MB, arm64: 1120.1 MB` |
+| Uncompressed size (per arch) | `amd64: 248.3 MB, arm64: 1120.1 MB` |
 | Last verified build (UTC) | `2026-11-27` |
-| Published multi-arch digest | `dgcosenza/fnxvm@sha256:4e93cd429f4e0a4ab295234ad85fb0c4d2856fd56edabe7e819a629026c6b428` |
-| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:4e93cd429f4e0a4ab295234ad85fb0c4d2856fd56edabe7e819a629026c6b428` |
+| Published multi-arch digest | `dgcosenza/fnxvm@sha256:c0517363be2341c8c8f1418afb6474ce4285a612731015d168bf38cc45e01e94` |
+| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:c0517363be2341c8c8f1418afb6474ce4285a612731015d168bf38cc45e01e94` |
 | Supply chain | Cosign OIDC signed + SPDX & CycloneDX SBOM attestations + SLSA Build L3 provenance |
 | Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (76 upstream-unfixed C/H) |
 

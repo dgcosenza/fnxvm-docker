@@ -20,7 +20,7 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
   - **Go builder:** `golang:1.27.4-trixie` pinned at `sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee`
   - `windows`: `Windows 11 (win11x64, build 26100.4349)`
 - Vulnerability gate: **0 fixable findings of any severity** in Trivy and Grype (SBOM scan) (68 upstream-unfixed C/H).
-- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:5f1c711d3438fb735b06de103bcfaefd89e97ac04dee452b99402446c2f3d0ff` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
+- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:7db21baff914ec70d4a3d9ceb40e20a02ec1cef4d5669bfcc8a181dfa3b9bc30` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
 ---
 
 ---

@@ -245,8 +245,8 @@ CI starts the container on both `linux/amd64` and `linux/arm64`, waits until Doc
 | Architectures | `linux/amd64, linux/arm64` |
 | Uncompressed size (per arch) | `amd64: 170.8 MB, arm64: 906.4 MB` |
 | Last verified build (UTC) | `2026-11-27` |
-| Published multi-arch digest | `dgcosenza/fnxvm@sha256:5f1c711d3438fb735b06de103bcfaefd89e97ac04dee452b99402446c2f3d0ff` |
-| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:5f1c711d3438fb735b06de103bcfaefd89e97ac04dee452b99402446c2f3d0ff` |
+| Published multi-arch digest | `dgcosenza/fnxvm@sha256:7db21baff914ec70d4a3d9ceb40e20a02ec1cef4d5669bfcc8a181dfa3b9bc30` |
+| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:7db21baff914ec70d4a3d9ceb40e20a02ec1cef4d5669bfcc8a181dfa3b9bc30` |
 | Supply chain | Cosign OIDC signed + SPDX & CycloneDX SBOM attestations + SLSA Build L3 provenance |
 | Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (68 upstream-unfixed C/H) |
 

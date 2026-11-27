@@ -7,6 +7,7 @@ set -Eeuo pipefail
 : "${QGA:=""}"
 : "${UUID:=""}"
 : "${MONITOR:=""}"
+: "${CLIPBOARD:="Y"}"
 : "${RAM_BACKEND:=""}"
 : "${KBD:="usb-kbd"}"
 : "${SOUND:="usb-audio"}"
@@ -122,6 +123,11 @@ configureMonitor() {
     MON_OPTS+=" -monitor unix:$ACPI_SOCKET,server=on,wait=off,nodelay=on"
   fi
 
+  # Private internal QMP socket for VNC/SPICE password setup and live inspection.
+  FNXVM_QMP_SOCKET="$QEMU_DIR/qmp.sock"
+  export FNXVM_QMP_SOCKET
+  MON_OPTS+=" -qmp unix:$FNXVM_QMP_SOCKET,server=on,wait=off"
+
   if [ -n "$MONITOR" ]; then
     MONITOR=$(normalizePort "$MONITOR" "telnet")
     MONITOR=$(normalizeSocket "$MONITOR")
@@ -175,6 +181,34 @@ configureGuestAgent() {
   return 0
 }
 
+configureClipboard() {
+
+  CLIP_OPTS=""
+  CLIPBOARD=$(strip "${CLIPBOARD:-Y}")
+
+  disabled "$CLIPBOARD" && return 0
+
+  local bus
+  bus=$(getPciBus)
+  local qbin="${QEMU_BIN:-qemu-system-aarch64}"
+  local chardev_help
+  chardev_help="$("$qbin" -M none -chardev help 2>&1 || true)"
+
+  if [ "${FNXVM_SPICE_ACTIVE:-N}" = "Y" ]; then
+    CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
+    CLIP_OPTS+=" -chardev spicevmc,id=vdagent,name=vdagent"
+    CLIP_OPTS+=" -device virtserialport,bus=virtio-serial-clip.0,chardev=vdagent,id=spicechannel0,name=com.redhat.spice.0"
+  elif grep -qw "qemu-vdagent" <<< "$chardev_help"; then
+    CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
+    CLIP_OPTS+=" -chardev qemu-vdagent,id=vdagent,name=vdagent,clipboard=on"
+    CLIP_OPTS+=" -device virtserialport,bus=virtio-serial-clip.0,chardev=vdagent,id=spicechannel0,name=com.redhat.spice.0"
+  else
+    warn "CLIPBOARD=Y requested, but QEMU qemu-vdagent chardev is unavailable; clipboard sync disabled."
+  fi
+
+  return 0
+}
+
 configureMachine() {
 
   local secure="off"
@@ -186,7 +220,9 @@ configureMachine() {
   # Let QEMU select the newest available GIC. Append msi=gicv2m only on QEMU
   # versions that expose the virt machine's msi property (QEMU 11+).
   local msi_opt=""
-  if qemu-system-aarch64 -machine "${MACHINE},help" 2>/dev/null | grep -q '^msi='; then
+  local mach_help
+  mach_help="$(qemu-system-aarch64 -machine "${MACHINE},help" 2>&1 || true)"
+  if grep -q '^msi=' <<< "$mach_help"; then
     msi_opt=",msi=gicv2m"
   fi
   MAC_OPTS="-machine type=${MACHINE},secure=${secure},gic-version=max${msi_opt}"
@@ -334,7 +370,7 @@ configureCompatibility() {
 
 buildArguments() {
 
-  ARGS="-nodefaults $MEM_OPTS $MAC_OPTS $CPU_OPTS $RAM_OPTS $ID_OPTS $PID_OPTS $DISPLAY_OPTS $MON_OPTS $SERIAL_OPTS $QGA_OPTS $USB_OPTS $NET_OPTS $DISK_OPTS $BOOT_OPTS $DEV_OPTS $AUDIO_OPTS $CMP_OPTS $ARGUMENTS"
+  ARGS="-nodefaults $MEM_OPTS $MAC_OPTS $CPU_OPTS $RAM_OPTS $ID_OPTS $PID_OPTS $DISPLAY_OPTS $MON_OPTS $SERIAL_OPTS $QGA_OPTS $CLIP_OPTS $USB_OPTS $NET_OPTS $DISK_OPTS $BOOT_OPTS $DEV_OPTS $AUDIO_OPTS $CMP_OPTS $ARGUMENTS"
 
   # Collapse whitespace after optional argument groups are assembled so
   # empty features do not leave malformed spacing in the final command.
@@ -349,6 +385,7 @@ configureMemory
 configureSerial
 configureMonitor
 configureGuestAgent
+configureClipboard
 configureMachine
 configureProcessor
 

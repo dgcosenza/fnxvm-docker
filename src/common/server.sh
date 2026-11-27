@@ -199,6 +199,7 @@ configureAuthentication() {
       error "Failed to persist bcrypt hash to ${HTPASSWD_PERSIST}!"
       return 1
     }
+    setOwner "$HTPASSWD_PERSIST" || true
     info "Web UI authentication enabled (HTTP Basic + bcrypt) for user '${WEB_USER}'."
     return 0
   fi
@@ -239,6 +240,7 @@ configureAuthentication() {
     error "Failed to persist bcrypt hash to ${HTPASSWD_PERSIST}!"
     return 1
   }
+  setOwner "$HTPASSWD_PERSIST" || true
 
   return 0
 }

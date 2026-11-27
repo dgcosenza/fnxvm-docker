@@ -199,9 +199,11 @@ GEN_PASS="$(printf '%s\n' "$C1_LOGS" | awk '/^[[:space:]]*Password:/ {print $2; 
   exit 1
 }
 
-# Verify persisted bcrypt hash exists and never stores plaintext.
+# Verify persisted bcrypt hash exists (mode 0600) and never stores plaintext.
 HTPASSWD_FILE="${TMPDIR_SMOKE}/storage-persist/.fnxvm-web.htpasswd"
 test -s "$HTPASSWD_FILE" || { echo "missing persisted ${HTPASSWD_FILE}" >&2; exit 1; }
+ht_mode="$(stat -c '%a' "$HTPASSWD_FILE")"
+[ "$ht_mode" = "600" ] || { echo "expected 0600 on ${HTPASSWD_FILE}, got ${ht_mode}" >&2; exit 1; }
 grep -Eq '^fnxvm:\$2[aby]\$[0-9]{2}\$' "$HTPASSWD_FILE" || {
   echo "persisted htpasswd is not a bcrypt hash" >&2
   exit 1

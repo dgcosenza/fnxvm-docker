@@ -204,10 +204,20 @@ jobs:
           echo "Detected (${ARCH}): Debian=${DEBIAN_VERSION}, Size=${SIZE_MB} MB"
           echo "### Image size (${ARCH}): **${SIZE_MB} MB** (${SIZE_BYTES} bytes)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke-test container and verify all 7 OS resolvers (${{ matrix.arch }})
+      - name: Install hash-pinned Playwright Chromium for noVNC tests (${{ matrix.arch }})
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/pw-venv
+          /tmp/pw-venv/bin/pip install --no-cache-dir --require-hashes -r tests/ci-playwright.requirements.txt
+          /tmp/pw-venv/bin/playwright install --with-deps chromium
+
+      - name: Smoke-test container, RFB clipboard, Playwright noVNC, and all 7 OS resolvers (${{ matrix.arch }})
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PLAYWRIGHT_PYTHON: /tmp/pw-venv/bin/python
+          REQUIRE_PLAYWRIGHT: '1'
         run: ./tests/smoke.sh "${IMAGE_NAME}:ci-candidate-${{ matrix.arch }}"
 
       - name: Install verified Dive, Syft, and Grype (${{ matrix.arch }})

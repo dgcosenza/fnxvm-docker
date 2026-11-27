@@ -10,6 +10,7 @@ WEB_PORT="${WEB_PORT:-8006}"
 VNC_PORT="${VNC_PORT:-5900}"
 WEB="${WEB:-Y}"
 WEB_AUTH="${WEB_AUTH:-Y}"
+WEB_TLS="${WEB_TLS:-N}"
 QEMU_DIR="/run/shm"
 HEALTH_SOCK="${QEMU_DIR}/nginx-health.sock"
 
@@ -22,6 +23,13 @@ fi
 is_disabled() {
   case "${1,,}" in
     n|no|none|false|0|off|disable|disabled) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_tls_enabled() {
+  case "${1,,}" in
+    y|yes|true|1|on|enable|enabled|selfsigned|auto) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -46,7 +54,11 @@ else
   fi
 
   # 2. Probe configured WEB_PORT and verify expected status (401 when auth is on, 200 when disabled).
-  code="$(curl -sS --max-time 4 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${WEB_PORT}/" || echo "000")"
+  if is_tls_enabled "$WEB_TLS"; then
+    code="$(curl -ksS --max-time 4 -o /dev/null -w '%{http_code}' "https://127.0.0.1:${WEB_PORT}/" || echo "000")"
+  else
+    code="$(curl -sS --max-time 4 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${WEB_PORT}/" || echo "000")"
+  fi
   if is_disabled "$WEB_AUTH"; then
     if [ "$code" != "200" ]; then
       echo "Web viewer on port ${WEB_PORT} returned HTTP ${code} (expected 200)" >&2

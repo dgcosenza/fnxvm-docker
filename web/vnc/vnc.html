@@ -203,12 +203,22 @@
                     <img alt="" src="app/images/clipboard.svg"> Clipboard
                 </div>
                 <p class="noVNC_subheading">
-                    Edit or paste below to sync with the guest clipboard (requires spice-vdagent in the guest), or send as keystrokes.
+                    Bidirectional clipboard with the VM (requires spice-vdagent in the guest). Use Type (ASCII) for agentless guests.
                 </p>
-                <textarea id="noVNC_clipboard_text" rows=5></textarea>
-                <br>
-                <input type="button" id="noVNC_clipboard_send_button" value="Copy to VM">
-                <input type="button" id="noVNC_clipboard_type_button" value="Type">
+                <div id="noVNC_clipboard_status" class="noVNC_clipboard_status" role="status" aria-live="polite">
+                    Waiting for VNC connection...
+                </div>
+                <textarea id="noVNC_clipboard_text" rows="5" placeholder="Copied VM text appears here, or paste text to send to the VM..."></textarea>
+                <div class="noVNC_clipboard_actions">
+                    <input type="button" id="noVNC_clipboard_read_button" value="Paste from Device" title="Read your device clipboard and send to the VM (requires HTTPS or localhost)">
+                    <input type="button" id="noVNC_clipboard_copy_button" value="Copy from VM" title="Copy the text above into your device clipboard">
+                    <input type="button" id="noVNC_clipboard_send_button" value="Copy to VM" title="Send the text above to the VM clipboard (UTF-8 Extended Clipboard)">
+                    <input type="button" id="noVNC_clipboard_type_button" value="Type (ASCII)" title="Type ASCII text as US-layout keystrokes for guests without a clipboard agent">
+                </div>
+                <label class="noVNC_clipboard_sync">
+                    <input id="noVNC_setting_clipboard_sync" type="checkbox" class="toggle">
+                    Auto-sync system clipboard (HTTPS / localhost)
+                </label>
             </div>
             </div>
 

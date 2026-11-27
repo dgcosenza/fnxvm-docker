@@ -27,6 +27,15 @@ services:
       GPU: "auto"
       # Host <-> guest clipboard via QEMU vdagent / virtio-serial (Y | N)
       CLIPBOARD: "Y"
+      # Auto-stage official SHA-256-verified spice-vdagent MSI during Windows x64/x86 unattended setup (Y | N)
+      # WINDOWS_VDAGENT: "Y"
+      # Forward port 3389 (TCP+UDP) in user-mode networking for Linux/BSD xrdp (Windows forwards 3389 automatically)
+      # RDP: "Y"
+      # Optional built-in HTTPS/WSS on 8006 (enables browser Async Clipboard API over LAN without a separate proxy)
+      # WEB_TLS: "Y"
+      # WEB_TLS_SAN: "DNS:vm.example.test,IP:192.0.2.10"
+      # WEB_TLS_CERT: "/certs/fullchain.pem"
+      # WEB_TLS_KEY: "/certs/privkey.pem"
       # Web UI authentication (default WEB_AUTH=Y; never collides with Windows USERNAME/PASSWORD)
       WEB_AUTH: "Y"
       WEB_USER: "fnxvm"

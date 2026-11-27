@@ -7,6 +7,27 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
 
 <!-- changelog:auto -->
 
+## [6.06.3] — 2026-11-27
+
+### Added
+- **Universal Web / noVNC bidirectional clipboard:**
+  - Async Clipboard API integration (`navigator.clipboard.writeText` / `readText`) over HTTPS and `localhost` with graceful fallback to the Clipboard panel on plain HTTP, Safari, Firefox, and mobile/tablet browsers (iOS/Android).
+  - Guest copies populate the Clipboard panel automatically and sync to the client system clipboard when permitted (highlighting the Clipboard icon with a one-tap **Copy from VM** button when the browser requires a user gesture).
+  - Client-to-guest paste works via automatic focus/click sync (when `clipboard-read` is granted), `Ctrl+V` / `Ctrl+Shift+V` / macOS `Cmd+V` interception without clobbering in-VM copy/paste, native DOM `paste` events, **Paste from Device**, **Copy to VM**, and non-ASCII-safe **Type (ASCII)** keystroke fallback (skips non-ASCII characters cleanly with a status notice instead of throwing).
+  - Live clipboard transport and sync status indicator plus `Auto-sync system clipboard` toggle in the noVNC Clipboard panel.
+- **Optional built-in HTTPS/WSS (`WEB_TLS=Y`):** Enables TLS 1.2/1.3 directly on `WEB_PORT` (`8006`) using user-supplied PEM files (`WEB_TLS_CERT` / `WEB_TLS_KEY`) or an auto-generated persisted ECDSA P-256 self-signed certificate (`/storage/.fnxvm-tls.{crt,key}`, optional `WEB_TLS_SAN`) using the existing `openssl` binary (zero extra packages). `fnxvm-healthcheck` probes `https://127.0.0.1:${WEB_PORT}/` when `WEB_TLS` is enabled.
+- **Linux/BSD RDP forwarding (`RDP=Y`):** Forwards `3389/tcp` and `3389/udp` alongside SSH (`22`) in user-mode networking (`NETWORK=user`/`passt`/`slirp`), matching Windows's built-in `3389` forwarding for `xrdp` / GNOME Remote Desktop guests.
+- **Automatic Windows SPICE VDAgent staging (`WINDOWS_VDAGENT=Y`):** At runtime during Windows x64/x86 unattended setup, downloads `spice-vdagent-{x64,x86}-0.10.0.msi` from official `spice-space.org`, verifies SHA-256 against both the live `sha256sum` file and pinned digest (fail-closed on mismatch, never bundled in the image), and silently installs via `SetupComplete.cmd`.
+- **Comprehensive Clipboard documentation:** Access method (`noVNC`, `VNC`, `RDP`) × guest OS × client platform (Windows, macOS, Linux, ChromeOS, Android, iOS) matrix, verified VNC client notes (including QEMU Extended Clipboard requirements and macOS Screen Sharing limits), one-line guest agent/RDP install commands, and TLS reverse-proxy + `WEB_TLS=Y` examples.
+- **Automated protocol and headless browser tests (CI on `amd64` + `arm64`):**
+  - `tests/test_rfb_clipboard.py`: Pure-Python authenticated RFB 3.8 client verifying VNC Auth rejection/acceptance, Extended Clipboard (`0xC0A1E5CE`) capability negotiation, bidirectional multi-byte UTF-8 round-trip, and legacy `ClientCutText` delivery through live QEMU.
+  - `tests/test_novnc_playwright.py`: Headless Chromium (Playwright) test verifying HTTP Basic Auth login, VNC auth, zero JS console/page errors, live bidirectional UTF-8 clipboard round-trip between browser and QEMU/RFB peer, **Paste from Device**, `Ctrl+V` interception, non-ASCII **Type** fallback, and `WEB_TLS=Y` HTTPS/WSS secure context.
+
+### Fixed
+- Fixed upstream noVNC `RFB.messages.extendedClipboardCaps` bitmask encoding and switched Extended Clipboard UTF-8 encode/decode to `TextEncoder` / `TextDecoder` (with fallback) for reliable multi-byte Unicode handling.
+
+---
+
 ## [6.06.2] — 2026-11-27
 
 ### Added

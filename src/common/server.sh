@@ -3,12 +3,20 @@ set -Eeuo pipefail
 
 : "${VNC_PORT:="5900"}"    # VNC port
 : "${WEB_PORT:="8006"}"    # Webserver port
+: "${WEB_TLS:="N"}"        # Optional built-in HTTPS/WSS on WEB_PORT (N | Y | selfsigned)
+: "${WEB_TLS_CERT:=""}"    # Optional user-supplied TLS certificate PEM path
+: "${WEB_TLS_KEY:=""}"     # Optional user-supplied TLS private key PEM path
+: "${WEB_TLS_SAN:=""}"     # Optional extra SANs for generated self-signed cert (e.g. DNS:vm.example.test,IP:192.0.2.10)
 : "${WEB_AUTH:="Y"}"       # Require HTTP Basic Auth on WEB_PORT (default Y)
 : "${WEB_USER:="fnxvm"}"   # HTTP Basic Auth username (separate from Windows USERNAME)
 
 # Sanitize variables
 VNC_PORT=$(strip "$VNC_PORT")
 WEB_PORT=$(strip "$WEB_PORT")
+WEB_TLS=$(strip "$WEB_TLS")
+WEB_TLS_CERT=$(strip "$WEB_TLS_CERT")
+WEB_TLS_KEY=$(strip "$WEB_TLS_KEY")
+WEB_TLS_SAN=$(strip "$WEB_TLS_SAN")
 WEB_AUTH=$(strip "$WEB_AUTH")
 WEB_USER=$(strip "$WEB_USER")
 [ -z "$WEB_USER" ] && WEB_USER="fnxvm"
@@ -17,7 +25,11 @@ WEB_USER=$(strip "$WEB_USER")
 AUTH_STORAGE="${STORAGE:-/storage}"
 HTPASSWD_PERSIST="${AUTH_STORAGE}/.fnxvm-web.htpasswd"
 VNC_SECRET_PERSIST="${AUTH_STORAGE}/.fnxvm-vnc.secret"
+TLS_CERT_PERSIST="${AUTH_STORAGE}/.fnxvm-tls.crt"
+TLS_KEY_PERSIST="${AUTH_STORAGE}/.fnxvm-tls.key"
 HTPASSWD_RUNTIME="/etc/nginx/.htpasswd"
+TLS_CERT_RUNTIME="/etc/nginx/fnxvm-tls.crt"
+TLS_KEY_RUNTIME="/etc/nginx/fnxvm-tls.key"
 VNC_PASSWORD_TMP="${QEMU_DIR}/.vnc-password"
 HEALTH_SOCKET="${QEMU_DIR}/nginx-health.sock"
 
@@ -86,12 +98,24 @@ writeHtpasswdAtomic() {
   )
 }
 
+tlsEnabled() {
+
+  case "${WEB_TLS,,}" in
+    y|yes|true|1|on|enable|enabled|selfsigned|auto) return 0 ;;
+    ""|n|no|none|false|0|off|disable|disabled) return 1 ;;
+    *)
+      error "Invalid WEB_TLS value '${WEB_TLS}'. Valid values: N, Y, selfsigned."
+      exit 2 ;;
+  esac
+}
+
 configureWebServer() {
 
   configureNginx || return 1
   configureAuthentication || return 1
   configureWebPorts || return 1
   configureIpv6Listen || return 1
+  configureWebTls || return 1
 
   return 0
 }
@@ -144,6 +168,110 @@ configureIpv6Listen() {
       return 1
     fi
 
+  fi
+
+  return 0
+}
+
+configureWebTls() {
+
+  tlsEnabled || return 0
+
+  if [ -n "$WEB_TLS_CERT" ] || [ -n "$WEB_TLS_KEY" ]; then
+    if [ -z "$WEB_TLS_CERT" ] || [ -z "$WEB_TLS_KEY" ]; then
+      error "WEB_TLS_CERT and WEB_TLS_KEY must both be set when supplying a custom TLS certificate."
+      exit 2
+    fi
+    if [ ! -f "$WEB_TLS_CERT" ] || [ ! -r "$WEB_TLS_CERT" ]; then
+      error "WEB_TLS_CERT ('${WEB_TLS_CERT}') does not exist or is unreadable."
+      exit 2
+    fi
+    if [ ! -f "$WEB_TLS_KEY" ] || [ ! -r "$WEB_TLS_KEY" ]; then
+      error "WEB_TLS_KEY ('${WEB_TLS_KEY}') does not exist or is unreadable."
+      exit 2
+    fi
+    (
+      umask 077
+      cp -f -- "$WEB_TLS_CERT" "$TLS_CERT_RUNTIME"
+      cp -f -- "$WEB_TLS_KEY" "$TLS_KEY_RUNTIME"
+      chmod 0644 "$TLS_CERT_RUNTIME"
+      chmod 0600 "$TLS_KEY_RUNTIME"
+    ) || {
+      error "Failed to stage provided TLS certificate/key!"
+      return 1
+    }
+    info "Web UI TLS (HTTPS/WSS) enabled on port ${WEB_PORT} using provided certificate (${WEB_TLS_CERT})."
+  elif [ -s "$TLS_CERT_PERSIST" ] && [ -s "$TLS_KEY_PERSIST" ]; then
+    (
+      umask 077
+      cp -f -- "$TLS_CERT_PERSIST" "$TLS_CERT_RUNTIME"
+      cp -f -- "$TLS_KEY_PERSIST" "$TLS_KEY_RUNTIME"
+      chmod 0644 "$TLS_CERT_RUNTIME"
+      chmod 0600 "$TLS_KEY_RUNTIME"
+    ) || {
+      error "Failed to load persisted self-signed TLS certificate from ${TLS_CERT_PERSIST}!"
+      return 1
+    }
+    info "Web UI TLS (HTTPS/WSS) enabled on port ${WEB_PORT} using persisted self-signed certificate (${TLS_CERT_PERSIST})."
+  else
+    local san="DNS:localhost,IP:127.0.0.1"
+    [ -n "$WEB_TLS_SAN" ] && san="${san},${WEB_TLS_SAN}"
+    local tmp_cert="${TLS_CERT_PERSIST}.tmp.$$"
+    local tmp_key="${TLS_KEY_PERSIST}.tmp.$$"
+
+    if ! (
+      umask 077
+      openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+        -sha256 -days 825 -nodes \
+        -subj "/CN=fnxvm" \
+        -addext "subjectAltName=${san}" \
+        -keyout "$tmp_key" \
+        -out "$tmp_cert" >/dev/null 2>&1
+      chmod 0600 "$tmp_key"
+      chmod 0644 "$tmp_cert"
+      mv -f -- "$tmp_key" "$TLS_KEY_PERSIST"
+      mv -f -- "$tmp_cert" "$TLS_CERT_PERSIST"
+      cp -f -- "$TLS_CERT_PERSIST" "$TLS_CERT_RUNTIME"
+      cp -f -- "$TLS_KEY_PERSIST" "$TLS_KEY_RUNTIME"
+      chmod 0644 "$TLS_CERT_RUNTIME"
+      chmod 0600 "$TLS_KEY_RUNTIME"
+    ); then
+      rm -f -- "$tmp_cert" "$tmp_key"
+      error "Failed to generate self-signed TLS certificate!"
+      return 1
+    fi
+
+    setOwner "$TLS_CERT_PERSIST" || true
+    setOwner "$TLS_KEY_PERSIST" || true
+
+    local fp
+    fp="$(openssl x509 -noout -fingerprint -sha256 -in "$TLS_CERT_RUNTIME" 2>/dev/null | sed 's/^.*=//')"
+    info "Web UI TLS (HTTPS/WSS) enabled on port ${WEB_PORT} with generated self-signed ECDSA certificate (SAN: ${san})."
+    info "TLS certificate SHA-256 fingerprint: ${fp:-unknown}"
+    info "Persisted in ${TLS_CERT_PERSIST} and ${TLS_KEY_PERSIST} (mode 0600); for trusted HTTPS use a TLS reverse proxy or WEB_TLS_CERT/WEB_TLS_KEY."
+  fi
+
+  local tmp_conf="/etc/nginx/sites-enabled/web.conf.tmp.$$"
+  if ! awk -v port="$WEB_PORT" -v cert="$TLS_CERT_RUNTIME" -v key="$TLS_KEY_RUNTIME" '
+    {
+      if ($0 ~ ("listen (\\[::\\]:)?" port " default_server")) {
+        sub(/default_server/, "ssl default_server")
+      }
+      print
+      if ($0 ~ /server_tokens off;/) {
+        print "    ssl_certificate " cert ";"
+        print "    ssl_certificate_key " key ";"
+        print "    ssl_protocols TLSv1.2 TLSv1.3;"
+        print "    ssl_prefer_server_ciphers off;"
+        print "    ssl_session_cache shared:SSL:2m;"
+        print "    ssl_session_timeout 10m;"
+      }
+    }
+  ' /etc/nginx/sites-enabled/web.conf > "$tmp_conf" || \
+     ! mv -f -- "$tmp_conf" /etc/nginx/sites-enabled/web.conf; then
+    rm -f -- "$tmp_conf"
+    error "Failed to apply TLS directives to nginx config!"
+    return 1
   fi
 
   return 0

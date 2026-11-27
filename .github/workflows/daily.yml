@@ -456,18 +456,62 @@ jobs:
           test -n "$DIG_AMD64" && test -n "$DIG_ARM64"
 
           SHA_TAG="sha-${GITHUB_SHA::7}"
-          DATE_TAG="${VER}-${BDATE}"
 
           docker buildx imagetools create \
             -t "ghcr.io/${IMAGE_NAME}:latest" \
             -t "ghcr.io/${IMAGE_NAME}:${VER}" \
-            -t "ghcr.io/${IMAGE_NAME}:${DATE_TAG}" \
             -t "ghcr.io/${IMAGE_NAME}:${SHA_TAG}" \
             "ghcr.io/${IMAGE_NAME}@${DIG_AMD64}" \
             "ghcr.io/${IMAGE_NAME}@${DIG_ARM64}"
 
           INDEX_DIGEST="$(crane digest "ghcr.io/${IMAGE_NAME}:latest")"
           echo "GHCR multi-arch index digest: ${INDEX_DIGEST}"
+
+          # The date-stamped tag must stay immutable: <version>-<YYYYMMDD> is
+          # published once per day. A second same-day build (for example a
+          # re-run or a new commit) gets a numeric suffix instead of silently
+          # re-pointing the tag that was already released.
+          BASE_DATE_TAG="${VER}-${BDATE}"
+          DATE_TAG="${BASE_DATE_TAG}"
+
+          registries=("ghcr.io/${IMAGE_NAME}")
+          if [ "$HUB_ENABLED" = "true" ]; then
+            registries+=("index.docker.io/${IMAGE_NAME}")
+          fi
+
+          date_tag_in_use() {
+            local candidate="$1" reg
+            for reg in "${registries[@]}"; do
+              if crane digest "${reg}:${candidate}" >/dev/null 2>&1; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          date_tag_conflicts() {
+            local reg d
+            for reg in "${registries[@]}"; do
+              d="$(crane digest "${reg}:${BASE_DATE_TAG}" 2>/dev/null || true)"
+              if [ -n "$d" ] && [ "$d" != "$INDEX_DIGEST" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          if date_tag_conflicts; then
+            suffix=2
+            while date_tag_in_use "${BASE_DATE_TAG}.${suffix}"; do
+              suffix=$((suffix + 1))
+            done
+            DATE_TAG="${BASE_DATE_TAG}.${suffix}"
+            echo "Date-stamped tag ${BASE_DATE_TAG} already published with a different digest; using ${DATE_TAG}."
+          fi
+
+          docker buildx imagetools create \
+            -t "ghcr.io/${IMAGE_NAME}:${DATE_TAG}" \
+            "ghcr.io/${IMAGE_NAME}@${INDEX_DIGEST}"
 
           if [ "$HUB_ENABLED" = "true" ]; then
             crane copy "ghcr.io/${IMAGE_NAME}@${INDEX_DIGEST}" "index.docker.io/${IMAGE_NAME}:latest"

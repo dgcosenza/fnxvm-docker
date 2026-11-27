@@ -16,6 +16,7 @@ WEB_USER=$(strip "$WEB_USER")
 # Preserve root storage directory before OS-specific install scripts namespace STORAGE.
 AUTH_STORAGE="${STORAGE:-/storage}"
 HTPASSWD_PERSIST="${AUTH_STORAGE}/.fnxvm-web.htpasswd"
+VNC_SECRET_PERSIST="${AUTH_STORAGE}/.fnxvm-vnc.secret"
 HTPASSWD_RUNTIME="/etc/nginx/.htpasswd"
 VNC_PASSWORD_TMP="${QEMU_DIR}/.vnc-password"
 HEALTH_SOCKET="${QEMU_DIR}/nginx-health.sock"
@@ -34,7 +35,6 @@ AUX_LOG="/var/log/audio-socket.log"
 WSD_COMMAND="$QEMU_DIR/status.cmd"
 
 GENERATED_SECRET=""
-RESOLVED_WEB_PASSWORD=""
 
 generateRandomSecret() {
 
@@ -185,7 +185,6 @@ configureAuthentication() {
   fi
 
   if [ -n "$explicit_pw" ]; then
-    RESOLVED_WEB_PASSWORD="$explicit_pw"
     local entry
     if ! entry="$(printf '%s' "$explicit_pw" | htpasswd -niB -C 10 "$WEB_USER" 2>/dev/null)"; then
       error "Failed to generate bcrypt htpasswd entry!"
@@ -224,7 +223,6 @@ configureAuthentication() {
   # First start with no explicit password: generate a strong random password,
   # persist ONLY its bcrypt hash under /storage, and print plaintext once.
   GENERATED_SECRET="$(generateRandomSecret 24)"
-  RESOLVED_WEB_PASSWORD="$GENERATED_SECRET"
 
   local entry
   if ! entry="$(printf '%s' "$GENERATED_SECRET" | htpasswd -niB -C 10 "$WEB_USER" 2>/dev/null)"; then
@@ -256,15 +254,21 @@ configureVncPassword() {
   elif [ -n "${VNC_PASSWORD:-}" ]; then
     vnc_pw="$VNC_PASSWORD"
     vnc_source="explicit"
-  elif [ -n "$GENERATED_SECRET" ]; then
-    vnc_pw="${GENERATED_SECRET:0:8}"
-    vnc_source="generated_shared"
-  elif [ -n "$RESOLVED_WEB_PASSWORD" ]; then
-    vnc_pw="${RESOLVED_WEB_PASSWORD:0:8}"
-    vnc_source="web_shared"
+  elif [ -s "$VNC_SECRET_PERSIST" ]; then
+    # Independent VNC secret generated on an earlier start (mode 0600).
+    vnc_pw="$(head -c 64 "$VNC_SECRET_PERSIST" | tr -d '\r\n')"
+    vnc_source="persisted"
   else
+    # Independent random VNC secret: never derived from the Web UI password,
+    # because RFB authentication is weak and must not expose web credentials.
+    # QEMU needs the plaintext for set_password, so it is persisted mode 0600.
     vnc_pw="$(generateRandomSecret 8)"
-    vnc_source="ephemeral"
+    vnc_source="generated"
+    writeHtpasswdAtomic "$VNC_SECRET_PERSIST" "$vnc_pw" || {
+      error "Failed to persist generated VNC password to ${VNC_SECRET_PERSIST}!"
+      return 1
+    }
+    setOwner "$VNC_SECRET_PERSIST" || true
   fi
 
   if [ "${#vnc_pw}" -gt 8 ]; then
@@ -287,14 +291,15 @@ configureVncPassword() {
     echo "  Web UI (port ${WEB_PORT}, HTTP Basic Auth):"
     echo "    Username: ${WEB_USER}"
     echo "    Password: ${GENERATED_SECRET}"
-    if [ "$vnc_source" = "generated_shared" ]; then
-      echo "  VNC (port ${VNC_PORT}, RFB max 8 chars, derived from generated secret):"
+    if [ "$vnc_source" = "generated" ]; then
+      echo "  VNC (port ${VNC_PORT}, independent secret, RFB max 8 chars):"
       echo "    Password: ${vnc_pw}"
     else
       echo "  VNC (port ${VNC_PORT}): using configured VNC_PASSWORD / VNC_PASSWORD_FILE."
     fi
     echo "  Only the Web UI bcrypt hash is persisted in ${HTPASSWD_PERSIST}."
-    echo "  To rotate: delete ${HTPASSWD_PERSIST} and restart, or set"
+    echo "  The VNC secret is persisted mode 0600 in ${VNC_SECRET_PERSIST}."
+    echo "  To rotate: delete these files and restart, or set"
     echo "  WEB_PASSWORD_FILE / WEB_PASSWORD (and VNC_PASSWORD_FILE / VNC_PASSWORD)."
     echo "======================================================================"
     echo
@@ -302,18 +307,17 @@ configureVncPassword() {
     case "$vnc_source" in
       "explicit" )
         info "VNC authentication enabled on port ${VNC_PORT} (using configured VNC password)." ;;
-      "web_shared" )
-        info "VNC authentication enabled on port ${VNC_PORT} (using first 8 characters of WEB_PASSWORD; RFB limit is 8 chars)." ;;
-      "ephemeral" )
-        echo "❯ VNC authentication (port ${VNC_PORT}): no VNC_PASSWORD set and persisted web credentials are hash-only."
-        echo "❯ Ephemeral VNC session password (RFB max 8 chars): ${vnc_pw}"
-        echo "❯ Set VNC_PASSWORD_FILE or VNC_PASSWORD for a fixed VNC password." ;;
+      "persisted" )
+        info "VNC authentication enabled on port ${VNC_PORT} (using persisted independent secret ${VNC_SECRET_PERSIST})." ;;
+      "generated" )
+        echo "❯ VNC authentication (port ${VNC_PORT}): generated an independent VNC password (RFB max 8 chars), printed ONCE:"
+        echo "❯   VNC password: ${vnc_pw}"
+        echo "❯ It is persisted mode 0600 in ${VNC_SECRET_PERSIST}; set VNC_PASSWORD_FILE or VNC_PASSWORD to choose your own." ;;
     esac
   fi
 
   # Clear plaintext secrets from shell environment immediately.
   GENERATED_SECRET=""
-  RESOLVED_WEB_PASSWORD=""
   vnc_pw=""
 
   return 0

@@ -137,7 +137,7 @@ Both the web viewer (`8006`) and VNC (`5900`) require authentication by default;
   - **First start & persistence:** When unset, FNXVM generates a 24-character random password, prints it **once** in container logs, and persists **only the bcrypt hash** (`0600`) in `/storage/.fnxvm-web.htpasswd`. Restarts reuse the hash silently.
   - **Rotation:** Supply a new `WEB_PASSWORD_FILE`/`WEB_PASSWORD` and restart, or delete `/storage/.fnxvm-web.htpasswd` and restart to generate a fresh secret.
   - **Escape hatch (`WEB_AUTH=N`):** Disables nginx Basic Auth with a **loud warning** in logs. Use only behind an authenticating reverse proxy or strictly on loopback.
-- **VNC (`5900`):** Always launched with `-vnc ...,password=on` (RFB security type `2`, never `None`) and configured via QEMU's private QMP socket (`set_password` — never in `/proc/<pid>/cmdline`). Set `VNC_PASSWORD_FILE` / `VNC_PASSWORD` (defaults to the first 8 characters of the generated/web secret, or an ephemeral 8-char session password on hash-only restarts). **RFB caps VNC passwords at 8 characters and is unencrypted — do not publish port `5900` publicly**; use authenticated noVNC behind TLS instead.
+- **VNC (`5900`):** Always launched with `-vnc ...,password=on` (RFB security type `2`, never `None`) and configured via QEMU's private QMP socket (`set_password` — never in `/proc/<pid>/cmdline`). Set `VNC_PASSWORD_FILE` / `VNC_PASSWORD`; if neither is set, FNXVM generates an **independent** random 8-character VNC secret (never derived from the Web UI password), prints it **once** in the logs, and persists it with mode `0600` in `/storage/.fnxvm-vnc.secret` (QEMU needs the plaintext for `set_password`). Delete that file and restart to rotate it. The noVNC viewer asks for this VNC password after the Web UI sign-in. **RFB caps VNC passwords at 8 characters and is unencrypted — do not publish port `5900` publicly**; use authenticated noVNC behind TLS instead.
 
 ## Clipboard (host <-> guest)
 
@@ -177,7 +177,7 @@ Set `GPU=` (`auto` default, `virtio`, `virgl`, `qxl`, `std`):
 | `CLIPBOARD` | `Y` | Enable `virtio-serial-pci` + `qemu-vdagent`/`spicevmc` (`com.redhat.spice.0`). |
 | `WEB_AUTH` / `WEB_USER` | `Y` / `fnxvm` | HTTP Basic Auth toggle and username on `WEB_PORT`. |
 | `WEB_PASSWORD` / `WEB_PASSWORD_FILE` | *(auto-generated)* | Web UI password or secret file path (bcrypt-hashed into `/storage/.fnxvm-web.htpasswd`). |
-| `VNC_PASSWORD` / `VNC_PASSWORD_FILE` | *(derived, 8 chars)* | VNC RFB password or secret file path (max 8 chars, set via QMP). |
+| `VNC_PASSWORD` / `VNC_PASSWORD_FILE` | *(auto-generated, 8 chars)* | VNC RFB password or secret file path (max 8 chars, set via QMP). |
 | `SPICE` / `SPICE_PORT` | `N` / `5901` | Optional QMP-authenticated SPICE server alongside noVNC/VNC. |
 | `RAM_SIZE` / `CPU_CORES` / `DISK_SIZE` | `4G` / `2` / `64G` | Guest RAM, vCPUs (`half`/`max`), and `/storage` disk size (`>=40G` for `daemonarchy`). |
 | `DISK_FMT` / `BOOT_MODE` | `raw` / *(auto)* | `raw` or `qcow2`; `uefi`, `secure`, `legacy`, `windows`, `windows_secure`, `windows_legacy`. |

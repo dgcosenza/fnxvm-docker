@@ -213,6 +213,17 @@ if grep -Fq "$GEN_PASS" "$HTPASSWD_FILE"; then
   exit 1
 fi
 echo "first-start generated password + bcrypt persistence: ok"
+# Independent VNC secret: printed once, persisted 0600, never a prefix of the web password.
+GEN_VNC="$(printf '%s\n' "$C1_LOGS" | awk '/^[[:space:]]*Password:/ {n++; if (n==2) {print $2; exit}}')"
+VNC_SECRET_FILE="${TMPDIR_SMOKE}/storage-persist/.fnxvm-vnc.secret"
+[ "${#GEN_VNC}" -eq 8 ] || { echo "failed to parse generated VNC password (len=${#GEN_VNC})" >&2; exit 1; }
+test -s "$VNC_SECRET_FILE" || { echo "missing persisted ${VNC_SECRET_FILE}" >&2; exit 1; }
+[ "$(stat -c '%a' "$VNC_SECRET_FILE")" = "600" ] || { echo "expected 0600 on ${VNC_SECRET_FILE}" >&2; exit 1; }
+case "$GEN_PASS" in
+  "$GEN_VNC"*) echo "ERROR: VNC password is derived from the web password!" >&2; exit 1 ;;
+esac
+echo "independent VNC secret (printed once, persisted 0600): ok"
+
 
 WEB_PORT_1="$(docker port "$C1" 8006/tcp | head -n 1 | awk -F: '{print $NF}')"
 VNC_PORT_1="$(docker port "$C1" 5900/tcp | head -n 1 | awk -F: '{print $NF}')"
@@ -359,6 +370,10 @@ if echo "$C2_LOGS" | grep -q "printed ONCE"; then
 fi
 if echo "$C2_LOGS" | grep -Fq "$GEN_PASS"; then
   echo "ERROR: restart leaked persisted web password!" >&2
+  exit 1
+fi
+if echo "$C2_LOGS" | grep -Fq "$GEN_VNC"; then
+  echo "ERROR: restart reprinted the persisted VNC password!" >&2
   exit 1
 fi
 echo "$C2_LOGS" | grep -q "persisted bcrypt hash" || {

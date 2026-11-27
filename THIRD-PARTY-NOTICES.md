@@ -4,7 +4,7 @@ This container image packaging (Dockerfile, FNXVM entry/resolver/healthcheck scr
 
 FNXVM reuses and adapts scripts and assets from the following upstream open-source projects, and installs official Debian 13 (trixie) packages. All third-party components remain under their respective licenses.
 
-**Guest operating system media are NEVER bundled or redistributed in this image.** When started, the container downloads guest installation media directly from the respective official vendor endpoints (Microsoft, Haiku Project, FreeBSD Project, Daemonarchy / Jordan Hubbard, Debian Project, Canonical / Ubuntu, and Omarchy) and verifies vendor-published checksums and cryptographic signatures before booting. Guest operating systems are governed by their own vendor licenses and terms (e.g., Daemonarchy original work is BSD-2-Clause and is not affiliated with Omarchy).
+**Guest operating system media and optional Windows guest agents are NEVER bundled or redistributed in this image.** When started, the container downloads guest installation media directly from the respective official vendor endpoints (Microsoft, Haiku Project, FreeBSD Project, Daemonarchy / Jordan Hubbard, Debian Project, Canonical / Ubuntu, and Omarchy) — and optionally the official `spice-vdagent` Windows MSI from `spice-space.org` (GPL-2.0-or-later) during x64/x86 Windows unattended setup — and verifies vendor-published checksums and cryptographic signatures before booting. Guest operating systems and agents are governed by their own vendor licenses and terms (e.g., Daemonarchy original work is BSD-2-Clause and is not affiliated with Omarchy).
 
 ## Upstream Projects Adapted in Packaging
 

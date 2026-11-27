@@ -1923,7 +1923,97 @@ prepareSetupScript() {
   stageUnattendLauncher "$stage" || return 1
   updateSetupScript "$staged" "$asset" || return 1
   finalizeSetupScript "$staged" || return 1
+  stageWindowsVdagent "$asset" "$stage" || return 1
   stageSetupCompleteWrapper "$stage" || return 1
+
+  return 0
+}
+
+verifyWindowsVdagentSha256() {
+
+  local file="$1"
+  local filename="$2"
+  local expected_pin="$3"
+  local sum_file="${4:-}"
+
+  local actual
+  actual="$(sha256sum "$file" | awk '{print $1}')"
+
+  if [ "$actual" != "$expected_pin" ]; then
+    error "SHA-256 mismatch for ${filename}: got ${actual}, expected pinned ${expected_pin}; refusing to stage."
+    return 1
+  fi
+
+  if [ -n "$sum_file" ] && [ -s "$sum_file" ]; then
+    local remote_sum
+    remote_sum="$(awk -v f="$filename" '$2 == f {print $1; exit}' "$sum_file")"
+    if [ -z "$remote_sum" ] || [ "$actual" != "$remote_sum" ]; then
+      error "SHA-256 mismatch for ${filename} against official sha256sum file; refusing to stage."
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+stageWindowsVdagent() {
+
+  local asset="$1"
+  local stage="$2"
+
+  # Opt-out when clipboard or Windows vdagent staging is disabled.
+  if disabled "${CLIPBOARD:-Y}" || disabled "${WINDOWS_VDAGENT:-Y}"; then
+    return 0
+  fi
+
+  local id
+  id="$(basename "$asset")"
+  id="${id%.*}"
+
+  local msi_name=""
+  local msi_sha256=""
+  case "${id,,}" in
+    *arm64* )
+      info "Skipping automatic spice-vdagent MSI on Windows ARM64 (no official ARM64 MSI); use RDP or manual guest tools for clipboard."
+      return 0 ;;
+    *x86* )
+      msi_name="spice-vdagent-x86-0.10.0.msi"
+      msi_sha256="db2779e2f746c1c7bb45d90203dde1691269a57b99bdf39afbe4aa391e04fced" ;;
+    * )
+      msi_name="spice-vdagent-x64-0.10.0.msi"
+      msi_sha256="77629435705bc27dd7d2525e9d2084f72dbab5fdbf310e812f91332fe18d00eb" ;;
+  esac
+
+  local base_url="https://www.spice-space.org/download/windows/vdagent/vdagent-win-0.10.0"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)" || return 0
+  local tmp_msi="${tmp_dir}/${msi_name}"
+  local tmp_sum="${tmp_dir}/sha256sum"
+
+  info "Downloading official SPICE VDAgent (${msi_name}) from spice-space.org for unattended Windows clipboard support..."
+  if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 "${base_url}/sha256sum" -o "$tmp_sum" || \
+     ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 "${base_url}/${msi_name}" -o "$tmp_msi"; then
+    warn "Could not download ${msi_name} from spice-space.org (offline or unreachable); continuing Windows setup without pre-staged clipboard agent."
+    rm -rf "$tmp_dir"
+    return 0
+  fi
+
+  # Fail closed on checksum mismatch: never stage an unverified executable.
+  if ! verifyWindowsVdagentSha256 "$tmp_msi" "$msi_name" "$msi_sha256" "$tmp_sum"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  local target="$stage/\$OEM\$/\$\$/Setup/Scripts/spice-vdagent.msi"
+  mkdir -p "$(dirname "$target")" || { rm -rf "$tmp_dir"; return 1; }
+  if ! mv -f -- "$tmp_msi" "$target"; then
+    rm -rf "$tmp_dir"
+    error "Failed to stage verified ${msi_name}!"
+    return 1
+  fi
+  chmod 0644 "$target"
+  rm -rf "$tmp_dir"
+  info "Staged verified ${msi_name} (SHA-256 OK) for silent unattended installation."
 
   return 0
 }
@@ -1936,7 +2026,9 @@ stageSetupCompleteWrapper() {
   if ! cat > "$target" <<'EOF'
 @echo off
 call "%~dp0Unattend.cmd" setup
-exit /b %errorlevel%
+set "FNXVM_SETUP_RC=%errorlevel%"
+if exist "%~dp0spice-vdagent.msi" msiexec.exe /i "%~dp0spice-vdagent.msi" /qn /norestart
+exit /b %FNXVM_SETUP_RC%
 EOF
   then
     error "Failed to create SetupComplete wrapper!"

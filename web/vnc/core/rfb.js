@@ -491,17 +491,34 @@ export default class RFB extends EventTargetMixin {
         }
     }
 
+    get extendedClipboardSupported() {
+        return !!(this._clipboardServerCapabilitiesFormats[extendedClipboardFormatText] &&
+                  this._clipboardServerCapabilitiesActions[extendedClipboardActionNotify]);
+    }
+
     async sendText(text, options = {}) {
         const delay = options.delay ?? 30;
-        const normalizedText = text.replace(/\r\n|\r/g, '\n');
+        const skipUnsupported = Boolean(options.skipUnsupported);
+        const normalizedText = text
+            .replace(/\r\n|\r/g, '\n')
+            .replace(/\u00a0/g, ' ');
 
         if (!Number.isFinite(delay) || delay < 0) {
             throw new TypeError("Text input delay must be a non-negative number");
         }
 
-        const keys = [...normalizedText].map(getAsciiKey);
-        if (keys.some(key => key === null)) {
-            throw new TypeError("Text input supports ASCII characters only");
+        const keys = [];
+        let skipped = 0;
+        for (const ch of normalizedText) {
+            const key = getAsciiKey(ch);
+            if (key === null) {
+                if (!skipUnsupported) {
+                    throw new TypeError("Text input supports ASCII characters only");
+                }
+                skipped++;
+            } else {
+                keys.push(key);
+            }
         }
 
         if (this._textSendInProgress) {
@@ -534,6 +551,8 @@ export default class RFB extends EventTargetMixin {
         } finally {
             this._textSendInProgress = false;
         }
+
+        return { typed: keys.length, skipped };
     }
 
     focus(options) {
@@ -545,13 +564,14 @@ export default class RFB extends EventTargetMixin {
     }
 
     clipboardPasteFrom(text) {
-        if (this._rfbConnectionState !== 'connected' || this._viewOnly) { return; }
+        if (this._rfbConnectionState !== 'connected' || this._viewOnly) { return null; }
 
         if (this._clipboardServerCapabilitiesFormats[extendedClipboardFormatText] &&
             this._clipboardServerCapabilitiesActions[extendedClipboardActionNotify]) {
 
             this._clipboardText = text;
             RFB.messages.extendedClipboardNotify(this._sock, [extendedClipboardFormatText]);
+            return 'extended';
         } else {
             let length, i;
             let data;
@@ -577,6 +597,7 @@ export default class RFB extends EventTargetMixin {
             }
 
             RFB.messages.clientCutText(this._sock, data);
+            return 'legacy';
         }
     }
 
@@ -2433,7 +2454,16 @@ export default class RFB extends EventTargetMixin {
                     extendedClipboardActionNotify,
                     extendedClipboardActionProvide
                 ];
-                RFB.messages.extendedClipboardCaps(this._sock, clientActions, {extendedClipboardFormatText: 0});
+                RFB.messages.extendedClipboardCaps(this._sock, clientActions, { [extendedClipboardFormatText]: 0 });
+
+                this.dispatchEvent(new CustomEvent(
+                    "clipboardcapabilities",
+                    {
+                        detail: {
+                            extended: this.extendedClipboardSupported,
+                            text: !!this._clipboardServerCapabilitiesFormats[extendedClipboardFormatText],
+                        }
+                    }));
 
             } else if (actions === extendedClipboardActionRequest) {
                 if (this._viewOnly) {
@@ -2514,13 +2544,15 @@ export default class RFB extends EventTargetMixin {
                 streamInflator.setInput(null);
 
                 if (textData !== null) {
-                    let tmpText = "";
-                    for (let i = 0; i < textData.length; i++) {
-                        tmpText += String.fromCharCode(textData[i]);
+                    if (typeof TextDecoder === "function") {
+                        textData = new TextDecoder("utf-8", { fatal: false }).decode(textData);
+                    } else {
+                        let tmpText = "";
+                        for (let i = 0; i < textData.length; i++) {
+                            tmpText += String.fromCharCode(textData[i]);
+                        }
+                        textData = decodeUTF8(tmpText);
                     }
-                    textData = tmpText;
-
-                    textData = decodeUTF8(textData);
                     if ((textData.length > 0) && "\0" === textData.charAt(textData.length - 1)) {
                         textData = textData.slice(0, -1);
                     }
@@ -3206,10 +3238,10 @@ RFB.messages = {
             formatFlag |= formats[i];
         }
 
-        data[0] = actionFlag >> 24; // Actions
-        data[1] = 0x00;             // Reserved
-        data[2] = 0x00;             // Reserved
-        data[3] = formatFlag;       // Formats
+        data[0] = (actionFlag >>> 24) & 0xFF; // Actions
+        data[1] = 0x00;                       // Reserved
+        data[2] = (formatFlag >>> 8) & 0xFF;  // Formats (high)
+        data[3] = formatFlag & 0xFF;          // Formats (low)
 
         return data;
     },
@@ -3228,16 +3260,25 @@ RFB.messages = {
             // Change lone \r or \n into \r\n as defined in rfbproto
             inData[i] = inData[i].replace(/\r\n|\r|\n/gm, "\r\n");
 
-            // Check if it already has \0
-            let text = encodeUTF8(inData[i] + "\0");
+            // Encode UTF-8 with trailing NUL as specified by Extended Clipboard
+            let textBytes;
+            if (typeof TextEncoder === "function") {
+                textBytes = new TextEncoder().encode(inData[i] + "\0");
+            } else {
+                const encoded = encodeUTF8(inData[i] + "\0");
+                textBytes = new Uint8Array(encoded.length);
+                for (let j = 0; j < encoded.length; j++) {
+                    textBytes[j] = encoded.charCodeAt(j);
+                }
+            }
 
-            dataToDeflate.push( (text.length >> 24) & 0xFF,
-                                (text.length >> 16) & 0xFF,
-                                (text.length >>  8) & 0xFF,
-                                (text.length & 0xFF));
+            dataToDeflate.push( (textBytes.length >>> 24) & 0xFF,
+                                (textBytes.length >>> 16) & 0xFF,
+                                (textBytes.length >>>  8) & 0xFF,
+                                (textBytes.length & 0xFF));
 
-            for (let j = 0; j < text.length; j++) {
-                dataToDeflate.push(text.charCodeAt(j));
+            for (let j = 0; j < textBytes.length; j++) {
+                dataToDeflate.push(textBytes[j]);
             }
         }
 
@@ -3265,23 +3306,23 @@ RFB.messages = {
     },
 
     extendedClipboardCaps(sock, actions, formats) {
-        let formatKeys = Object.keys(formats);
-        let data  = new Uint8Array(4 + (4 * formatKeys.length));
+        let formatKeys = Object.keys(formats)
+            .map(x => parseInt(x, 10))
+            .filter(x => Number.isFinite(x) && x > 0)
+            .sort((a, b) => a - b);
+        let data = new Uint8Array(4 + (4 * formatKeys.length));
 
-        formatKeys.map(x => parseInt(x));
-        formatKeys.sort((a, b) =>  a - b);
-
-        data.set(RFB.messages._buildExtendedClipboardFlags(actions, []));
+        data.set(RFB.messages._buildExtendedClipboardFlags(actions, formatKeys));
 
         let loopOffset = 4;
         for (let i = 0; i < formatKeys.length; i++) {
-            data[loopOffset]     = formats[formatKeys[i]] >> 24;
-            data[loopOffset + 1] = formats[formatKeys[i]] >> 16;
-            data[loopOffset + 2] = formats[formatKeys[i]] >> 8;
-            data[loopOffset + 3] = formats[formatKeys[i]] >> 0;
+            const maxLen = formats[formatKeys[i]] >>> 0;
+            data[loopOffset]     = (maxLen >>> 24) & 0xFF;
+            data[loopOffset + 1] = (maxLen >>> 16) & 0xFF;
+            data[loopOffset + 2] = (maxLen >>> 8) & 0xFF;
+            data[loopOffset + 3] = maxLen & 0xFF;
 
             loopOffset += 4;
-            data[3] |= (1 << formatKeys[i]); // Update our format flags
         }
 
         RFB.messages.clientCutText(sock, data, true);

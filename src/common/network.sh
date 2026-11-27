@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 : "${DHCP:="N"}"
 : "${NETWORK:="Y"}"
+: "${RDP:="N"}"
 : "${HOST_PORTS:=""}"
 : "${USER_PORTS:=""}"
 : "${CHECK_PORT:="80"}"
@@ -41,6 +42,7 @@ MASK=$(strip "$MASK")
 BRIDGE=$(strip "$BRIDGE")
 ADAPTER=$(strip "$ADAPTER")
 NETWORK=$(strip "$NETWORK")
+RDP=$(strip "$RDP")
 HOST_PORTS=$(strip "$HOST_PORTS")
 USER_PORTS=$(strip "$USER_PORTS")
 CHECK_PORT=$(strip "$CHECK_PORT")
@@ -629,10 +631,15 @@ getHostPorts() {
 
 getUserPorts() {
 
-  # User-mode networking exposes SSH by default, or RDP over both TCP and UDP for
-  # Windows, while excluding ports already owned by the container.
+  # User-mode networking exposes SSH by default, RDP over both TCP and UDP for
+  # Windows, and both SSH and RDP when RDP=Y is enabled for Linux/BSD guests,
+  # while excluding ports already owned by the container.
   local defaults="22"
-  [[ "${BOOT_MODE:-}" == "windows"* ]] && defaults="3389/tcp,3389/udp"
+  if [[ "${BOOT_MODE:-}" == "windows"* ]]; then
+    defaults="3389/tcp,3389/udp"
+  elif enabled "$RDP"; then
+    defaults="22,3389/tcp,3389/udp"
+  fi
   local list="$defaults,${USER_PORTS// /},"
 
   local ports=""

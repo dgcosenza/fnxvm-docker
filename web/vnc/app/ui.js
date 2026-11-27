@@ -50,6 +50,11 @@ const UI = {
     reconnectFailures: 0,
     reconnectPassword: null,
 
+    clipboardReadPermission: 'unknown',
+    lastRemoteClipboard: null,
+    lastSyncedLocalClipboard: null,
+    clipboardSyncInFlight: false,
+
     async start(options={}) {
         UI.customSettings = options.settings || {};
         if (UI.customSettings.defaults === undefined) {
@@ -190,6 +195,7 @@ const UI = {
         UI.initSetting('repeaterID', '');
         UI.initSetting('reconnect', true);
         UI.initSetting('reconnect_delay', 1000);
+        UI.initSetting('clipboard_sync', true);
     },
     // Adds a link to the label elements on the corresponding input elements
     setupSettingLabels() {
@@ -339,14 +345,41 @@ const UI = {
     addClipboardHandlers() {
         document.getElementById("noVNC_clipboard_button")
             .addEventListener('click', UI.toggleClipboardPanel);
-        document.getElementById("noVNC_clipboard_text")
-            .addEventListener('change', UI.clipboardSend);
+        const clipText = document.getElementById("noVNC_clipboard_text");
+        clipText.addEventListener('change', () => UI.clipboardSend());
+        clipText.addEventListener('paste', () => {
+            setTimeout(() => {
+                if (UI.getSetting('clipboard_sync')) {
+                    UI.clipboardSend();
+                }
+            }, 0);
+        });
+        const readBtn = document.getElementById("noVNC_clipboard_read_button");
+        if (readBtn) {
+            readBtn.addEventListener('click', UI.clipboardReadFromDevice);
+        }
+        const copyBtn = document.getElementById("noVNC_clipboard_copy_button");
+        if (copyBtn) {
+            copyBtn.addEventListener('click', UI.clipboardCopyToDevice);
+        }
         document.getElementById("noVNC_clipboard_send_button")
-            .addEventListener('click', UI.clipboardSend);
+            .addEventListener('click', () => UI.clipboardSend());
         const typeBtn = document.getElementById("noVNC_clipboard_type_button");
         if (typeBtn) {
             typeBtn.addEventListener('click', UI.clipboardType);
         }
+
+        window.addEventListener('paste', UI.handleWindowPaste);
+        window.addEventListener('focus', UI.syncFromDeviceIfPermitted);
+
+        const container = document.getElementById("noVNC_container");
+        if (container) {
+            container.addEventListener('keydown', UI.handleCanvasClipboardKeydown, true);
+            container.addEventListener('pointerdown', UI.syncFromDeviceIfPermitted);
+        }
+
+        UI.initClipboardPermissions();
+        UI.updateClipboardStatus();
     },
 
     // Add a call to save settings when the element changes,
@@ -386,6 +419,12 @@ const UI = {
         UI.addSettingChangeHandler('logging', UI.updateLogging);
         UI.addSettingChangeHandler('reconnect');
         UI.addSettingChangeHandler('reconnect_delay');
+        if (document.getElementById("noVNC_setting_clipboard_sync")) {
+            UI.addSettingChangeHandler('clipboard_sync', () => {
+                UI.saveSetting('clipboard_sync');
+                UI.updateClipboardStatus();
+            });
+        }
     },
 
     addFullscreenHandlers() {
@@ -1052,6 +1091,7 @@ const UI = {
             .classList.add("noVNC_open");
         document.getElementById('noVNC_clipboard_button')
             .classList.add("noVNC_selected");
+        UI.updateClipboardStatus();
     },
 
     closeClipboardPanel() {
@@ -1070,29 +1110,451 @@ const UI = {
         }
     },
 
-    clipboardReceive(e) {
-        Log.Debug(">> UI.clipboardReceive: " + e.detail.text.substr(0, 40) + "...");
-        document.getElementById('noVNC_clipboard_text').value = e.detail.text;
+    hasAsyncClipboardApi() {
+        return Boolean(window.isSecureContext &&
+                       typeof navigator !== 'undefined' &&
+                       navigator.clipboard);
+    },
+
+    initClipboardPermissions() {
+        if (!UI.hasAsyncClipboardApi() ||
+            !navigator.permissions ||
+            typeof navigator.permissions.query !== 'function') {
+            return;
+        }
+        try {
+            navigator.permissions.query({ name: 'clipboard-read' })
+                .then((status) => {
+                    UI.clipboardReadPermission = status.state;
+                    status.onchange = () => {
+                        UI.clipboardReadPermission = status.state;
+                        UI.updateClipboardStatus();
+                    };
+                    UI.updateClipboardStatus();
+                })
+                .catch(() => {
+                    // Safari and Firefox do not expose clipboard-read via Permissions API.
+                    UI.clipboardReadPermission = 'prompt';
+                });
+        } catch (_err) {
+            UI.clipboardReadPermission = 'prompt';
+        }
+    },
+
+    setClipboardStatus(message, warn = false) {
+        const el = document.getElementById('noVNC_clipboard_status');
+        if (!el) {
+            return;
+        }
+        el.textContent = message;
+        el.classList.toggle('noVNC_clipboard_warn', Boolean(warn));
+    },
+
+    updateClipboardStatus() {
+        const transport = (UI.rfb && UI.rfb.extendedClipboardSupported)
+            ? "Extended Clipboard (UTF-8)"
+            : (UI.connected ? "Legacy CutText (ISO-8859-1)" : "Not connected");
+
+        if (!UI.connected) {
+            UI.setClipboardStatus("Waiting for VNC connection...", false);
+            return;
+        }
+
+        if (!window.isSecureContext) {
+            UI.setClipboardStatus(
+                `${transport} — panel-only mode (open over HTTPS or localhost for automatic system clipboard sync).`,
+                true
+            );
+            return;
+        }
+
+        const autoSync = Boolean(UI.getSetting('clipboard_sync'));
+        if (!autoSync) {
+            UI.setClipboardStatus(`${transport} — manual panel mode (auto-sync off).`, false);
+            return;
+        }
+
+        UI.setClipboardStatus(`${transport} — system clipboard sync ready.`, false);
+    },
+
+    clipboardCapabilitiesChanged() {
+        UI.updateClipboardStatus();
+    },
+
+    async clipboardReceive(e) {
+        const text = (e && e.detail && typeof e.detail.text === 'string') ? e.detail.text : '';
+        Log.Debug(">> UI.clipboardReceive: " + text.substr(0, 40) + "...");
+        const textarea = document.getElementById('noVNC_clipboard_text');
+        if (textarea) {
+            textarea.value = text;
+        }
+        UI.lastRemoteClipboard = text;
+
+        const clipBtn = document.getElementById('noVNC_clipboard_button');
+        const autoSync = Boolean(UI.getSetting('clipboard_sync'));
+
+        if (autoSync && UI.hasAsyncClipboardApi() &&
+            typeof navigator.clipboard.writeText === 'function') {
+            try {
+                await navigator.clipboard.writeText(text);
+                UI.lastSyncedLocalClipboard = text;
+                if (clipBtn) {
+                    clipBtn.classList.remove('noVNC_clipboard_pending');
+                }
+                UI.setClipboardStatus(
+                    `Synced from VM to your clipboard (${text.length} chars).`,
+                    false
+                );
+                Log.Debug("<< UI.clipboardReceive (synced to system clipboard)");
+                return;
+            } catch (err) {
+                Log.Debug("System clipboard write requires user gesture or focus: " + err);
+            }
+        }
+
+        if (clipBtn) {
+            clipBtn.classList.add('noVNC_clipboard_pending');
+        }
+        if (!window.isSecureContext) {
+            UI.setClipboardStatus(
+                `Received from VM (${text.length} chars) — use HTTPS/localhost for auto-sync, or click "Copy from VM".`,
+                true
+            );
+        } else {
+            UI.setClipboardStatus(
+                `Received from VM (${text.length} chars) — click "Copy from VM" to copy to your device.`,
+                true
+            );
+        }
         Log.Debug("<< UI.clipboardReceive");
     },
 
-    clipboardSend() {
-        const text = document.getElementById('noVNC_clipboard_text').value;
+    clipboardSend(overrideText) {
+        const textarea = document.getElementById('noVNC_clipboard_text');
+        const text = (typeof overrideText === 'string')
+            ? overrideText
+            : (textarea ? textarea.value : '');
         Log.Debug(">> UI.clipboardSend: " + text.substr(0, 40) + "...");
-        if (UI.rfb) {
-            UI.rfb.clipboardPasteFrom(text);
+        if (!UI.rfb || !UI.connected) {
+            UI.setClipboardStatus("Not connected to VM.", true);
+            return;
         }
+        const mode = UI.rfb.clipboardPasteFrom(text);
+        UI.lastSyncedLocalClipboard = text;
+        const label = mode === 'extended'
+            ? "Extended Clipboard (UTF-8)"
+            : "legacy CutText (ISO-8859-1)";
+        UI.setClipboardStatus(`Sent ${text.length} chars to VM via ${label}.`, false);
         Log.Debug("<< UI.clipboardSend");
+    },
+
+    async clipboardCopyToDevice() {
+        const textarea = document.getElementById('noVNC_clipboard_text');
+        const text = textarea ? textarea.value : '';
+        const clipBtn = document.getElementById('noVNC_clipboard_button');
+
+        if (!text) {
+            UI.setClipboardStatus("Clipboard panel is empty.", true);
+            return;
+        }
+
+        if (UI.hasAsyncClipboardApi() &&
+            typeof navigator.clipboard.writeText === 'function') {
+            try {
+                await navigator.clipboard.writeText(text);
+                UI.lastSyncedLocalClipboard = text;
+                if (clipBtn) {
+                    clipBtn.classList.remove('noVNC_clipboard_pending');
+                }
+                UI.setClipboardStatus(
+                    `Copied ${text.length} chars from VM to your device clipboard.`,
+                    false
+                );
+                return;
+            } catch (err) {
+                Log.Warn("Async clipboard write failed, trying textarea fallback: " + err);
+            }
+        }
+
+        try {
+            textarea.focus();
+            textarea.select();
+            const ok = document.execCommand && document.execCommand('copy');
+            if (ok) {
+                UI.lastSyncedLocalClipboard = text;
+                if (clipBtn) {
+                    clipBtn.classList.remove('noVNC_clipboard_pending');
+                }
+                UI.setClipboardStatus(
+                    `Copied ${text.length} chars from VM to your device clipboard.`,
+                    false
+                );
+                return;
+            }
+        } catch (err) {
+            Log.Warn("Fallback copy failed: " + err);
+        }
+
+        UI.setClipboardStatus(
+            "Browser blocked automatic copy — press Ctrl/Cmd+C while the box above is selected.",
+            true
+        );
+    },
+
+    async clipboardReadFromDevice() {
+        const textarea = document.getElementById('noVNC_clipboard_text');
+
+        if (!UI.hasAsyncClipboardApi() ||
+            typeof navigator.clipboard.readText !== 'function') {
+            if (textarea) {
+                textarea.focus();
+            }
+            UI.setClipboardStatus(
+                'Browser clipboard read requires HTTPS or localhost — paste into the box above and click "Copy to VM".',
+                true
+            );
+            return;
+        }
+
+        try {
+            const text = await navigator.clipboard.readText();
+            UI.clipboardReadPermission = 'granted';
+            if (textarea) {
+                textarea.value = text;
+            }
+            UI.clipboardSend(text);
+        } catch (err) {
+            Log.Warn("Clipboard read blocked: " + err);
+            if (err && err.name === 'NotAllowedError') {
+                UI.clipboardReadPermission = 'denied';
+            }
+            if (textarea) {
+                textarea.focus();
+            }
+            UI.setClipboardStatus(
+                'Browser blocked clipboard read — paste into the box above (Ctrl/Cmd+V) and click "Copy to VM".',
+                true
+            );
+        }
+    },
+
+    async syncFromDeviceIfPermitted() {
+        if (!UI.connected || !UI.rfb || UI.rfb.viewOnly ||
+            !UI.getSetting('clipboard_sync') || UI.clipboardSyncInFlight) {
+            return;
+        }
+        if (UI.clipboardReadPermission !== 'granted' ||
+            !UI.hasAsyncClipboardApi() ||
+            typeof navigator.clipboard.readText !== 'function') {
+            return;
+        }
+
+        UI.clipboardSyncInFlight = true;
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text &&
+                text !== UI.lastSyncedLocalClipboard &&
+                text !== UI.lastRemoteClipboard) {
+                const textarea = document.getElementById('noVNC_clipboard_text');
+                if (textarea) {
+                    textarea.value = text;
+                }
+                UI.lastSyncedLocalClipboard = text;
+                UI.rfb.clipboardPasteFrom(text);
+                UI.setClipboardStatus(
+                    `Auto-synced device clipboard to VM (${text.length} chars).`,
+                    false
+                );
+            }
+        } catch (_err) {
+            // Silent ignore on opportunistic focus/pointer sync.
+        } finally {
+            UI.clipboardSyncInFlight = false;
+        }
+    },
+
+    handleWindowPaste(e) {
+        if (!UI.connected || !UI.rfb || UI.rfb.viewOnly) {
+            return;
+        }
+        const target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+            if (target.id !== 'noVNC_clipboard_text') {
+                return;
+            }
+            // Textarea paste handler syncs after value updates.
+            return;
+        }
+        const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+        if (!text) {
+            return;
+        }
+        const textarea = document.getElementById('noVNC_clipboard_text');
+        if (textarea) {
+            textarea.value = text;
+        }
+        UI.clipboardSend(text);
+    },
+
+    sendGuestPasteKeys(withShift) {
+        if (!UI.rfb || !UI.connected || UI.rfb.viewOnly) {
+            return;
+        }
+        UI.rfb.sendKey(KeyTable.XK_Control_L, 'ControlLeft', true);
+        if (withShift) {
+            UI.rfb.sendKey(KeyTable.XK_Shift_L, 'ShiftLeft', true);
+        }
+        UI.rfb.sendKey(0x0076, 'KeyV', true);
+        UI.rfb.sendKey(0x0076, 'KeyV', false);
+        if (withShift) {
+            UI.rfb.sendKey(KeyTable.XK_Shift_L, 'ShiftLeft', false);
+        }
+        UI.rfb.sendKey(KeyTable.XK_Control_L, 'ControlLeft', false);
+    },
+
+    handleCanvasClipboardKeydown(e) {
+        if (!UI.connected || !UI.rfb || UI.rfb.viewOnly ||
+            !UI.getSetting('clipboard_sync') || e.repeat) {
+            return;
+        }
+        const target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+            if (target.id !== 'noVNC_keyboardinput') {
+                return;
+            }
+        }
+
+        const isV = (e.code === 'KeyV') ||
+                    (typeof e.key === 'string' && e.key.toLowerCase() === 'v');
+        if (!isV) {
+            return;
+        }
+
+        const isMacPaste = isMac() && e.metaKey && !e.ctrlKey && !e.altKey;
+        const isCtrlPaste = e.ctrlKey && !e.metaKey && !e.altKey;
+        if (!isMacPaste && !isCtrlPaste) {
+            return;
+        }
+
+        const canRead = UI.hasAsyncClipboardApi() &&
+                        typeof navigator.clipboard.readText === 'function' &&
+                        UI.clipboardReadPermission !== 'denied';
+
+        if (isMacPaste) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!canRead) {
+                UI.openClipboardPanel();
+                const textarea = document.getElementById('noVNC_clipboard_text');
+                if (textarea) {
+                    textarea.focus();
+                }
+                UI.setClipboardStatus(
+                    'Paste into the box above (Cmd+V) to sync to the VM (HTTPS/localhost required for direct Cmd+V).',
+                    true
+                );
+                return;
+            }
+
+            const withShift = Boolean(e.shiftKey);
+            (async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    UI.clipboardReadPermission = 'granted';
+                    if (text &&
+                        text !== UI.lastSyncedLocalClipboard &&
+                        text !== UI.lastRemoteClipboard) {
+                        const textarea = document.getElementById('noVNC_clipboard_text');
+                        if (textarea) {
+                            textarea.value = text;
+                        }
+                        UI.lastSyncedLocalClipboard = text;
+                        UI.rfb.clipboardPasteFrom(text);
+                        UI.setClipboardStatus(
+                            `Synced device clipboard to VM (${text.length} chars).`,
+                            false
+                        );
+                        await new Promise(resolve => setTimeout(resolve, 60));
+                    }
+                    UI.sendGuestPasteKeys(withShift);
+                } catch (_err) {
+                    UI.openClipboardPanel();
+                    const textarea = document.getElementById('noVNC_clipboard_text');
+                    if (textarea) {
+                        textarea.focus();
+                    }
+                    UI.setClipboardStatus(
+                        'Browser blocked direct Cmd+V read — paste into the box above to sync to the VM.',
+                        true
+                    );
+                }
+            })();
+            return;
+        }
+
+        // Ctrl+V / Ctrl+Shift+V: intercept only when clipboard-read is already granted
+        // so normal in-VM paste never stalls on a browser permission prompt.
+        if (isCtrlPaste && canRead && UI.clipboardReadPermission === 'granted') {
+            e.preventDefault();
+            e.stopPropagation();
+            const withShift = Boolean(e.shiftKey);
+            (async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text &&
+                        text !== UI.lastSyncedLocalClipboard &&
+                        text !== UI.lastRemoteClipboard) {
+                        const textarea = document.getElementById('noVNC_clipboard_text');
+                        if (textarea) {
+                            textarea.value = text;
+                        }
+                        UI.lastSyncedLocalClipboard = text;
+                        UI.rfb.clipboardPasteFrom(text);
+                        UI.setClipboardStatus(
+                            `Synced device clipboard to VM (${text.length} chars).`,
+                            false
+                        );
+                        await new Promise(resolve => setTimeout(resolve, 60));
+                    }
+                } catch (_err) {
+                    // Fall through and still send Ctrl+V to guest.
+                } finally {
+                    UI.sendGuestPasteKeys(withShift);
+                }
+            })();
+        }
     },
 
     async clipboardType() {
         const text = document.getElementById('noVNC_clipboard_text').value;
         Log.Debug(">> UI.clipboardType: " + text.substr(0, 40) + "...");
+        if (!UI.rfb || !UI.connected) {
+            UI.setClipboardStatus("Not connected to VM.", true);
+            return;
+        }
+        if (!text) {
+            UI.setClipboardStatus("Nothing to type.", true);
+            return;
+        }
         UI.closeControlbar();
         try {
-            await UI.rfb.sendText(text);
+            const res = await UI.rfb.sendText(text, { skipUnsupported: true });
+            if (res.typed === 0 && res.skipped > 0) {
+                UI.setClipboardStatus(
+                    `Skipped ${res.skipped} non-ASCII char(s) — Type supports US-layout ASCII only; use Copy to VM (with guest agent) or RDP for Unicode.`,
+                    true
+                );
+            } else if (res.skipped > 0) {
+                UI.setClipboardStatus(
+                    `Typed ${res.typed} ASCII char(s); skipped ${res.skipped} non-ASCII char(s) — use Copy to VM (with guest agent) or RDP for Unicode.`,
+                    true
+                );
+            } else {
+                UI.setClipboardStatus(`Typed ${res.typed} ASCII char(s) into VM.`, false);
+            }
         } catch (err) {
             Log.Error("Failed to send text: " + err);
+            UI.setClipboardStatus("Type failed: " + err.message, true);
         }
         Log.Debug("<< UI.clipboardType");
     },
@@ -1185,6 +1647,7 @@ const UI = {
         UI.rfb.addEventListener("clippingviewport", UI.updateViewDrag);
         UI.rfb.addEventListener("capabilities", UI.updatePowerButton);
         UI.rfb.addEventListener("clipboard", UI.clipboardReceive);
+        UI.rfb.addEventListener("clipboardcapabilities", UI.clipboardCapabilitiesChanged);
         UI.rfb.addEventListener("bell", UI.bell);
         UI.rfb.addEventListener("desktopname", UI.updateDesktopName);
         UI.rfb.clipViewport = UI.getSetting('view_clip');
@@ -1295,6 +1758,7 @@ const UI = {
         UI.updateVisualState('connected');
 
         UI.updateBeforeUnload();
+        UI.updateClipboardStatus();
 
         // Do this last because it can only be used on rendered elements
         UI.rfb.focus();

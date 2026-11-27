@@ -23,10 +23,20 @@
 # Maintainer: Daniel G. Cosenza from FNX Labs
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE="${1:-fnxvm:local}"
 TAG_PID="$$"
 TMPDIR_SMOKE="$(mktemp -d)"
 CONTAINERS=()
+
+PLAYWRIGHT_PY="${PLAYWRIGHT_PYTHON:-}"
+if [ -z "$PLAYWRIGHT_PY" ] && python3 -c "import playwright" >/dev/null 2>&1; then
+  PLAYWRIGHT_PY="python3"
+fi
+if [ "${REQUIRE_PLAYWRIGHT:-0}" = "1" ] && [ -z "$PLAYWRIGHT_PY" ]; then
+  echo "ERROR: REQUIRE_PLAYWRIGHT=1 but Playwright Python is unavailable" >&2
+  exit 1
+fi
 
 cleanup() {
   for c in "${CONTAINERS[@]:-}"; do
@@ -77,10 +87,12 @@ check_ws_upgrade() {
   local user="$2"
   local pass="$3"
   local expected_code="$4"
-  python3 - "$port" "$user" "$pass" "$expected_code" <<'PY'
-import base64, os, socket, sys
+  local use_tls="${5:-0}"
+  python3 - "$port" "$user" "$pass" "$expected_code" "$use_tls" <<'PY'
+import base64, os, socket, ssl, sys
 port = int(sys.argv[1])
 user, pw, expected = sys.argv[2], sys.argv[3], sys.argv[4]
+use_tls = sys.argv[5] == "1"
 ws_nonce = base64.b64encode(os.urandom(16)).decode()
 headers = [
     "GET /websockify HTTP/1.1",
@@ -94,7 +106,15 @@ if user or pw:
     tok = base64.b64encode(f"{user}:{pw}".encode()).decode()
     headers.append(f"Authorization: Basic {tok}")
 req = ("\r\n".join(headers) + "\r\n\r\n").encode()
-with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+raw = socket.create_connection(("127.0.0.1", port), timeout=5)
+if use_tls:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    conn = ctx.wrap_socket(raw, server_hostname="127.0.0.1")
+else:
+    conn = raw
+with conn as s:
     s.sendall(req)
     data = b""
     while b"\r\n" not in data:
@@ -246,8 +266,22 @@ check_ws_upgrade "$WEB_PORT_1" "fnxvm" "$BAD_PW" "401"
 check_ws_upgrade "$WEB_PORT_1" "$GEN_USER" "$GEN_PASS" "101"
 echo "web UI (401/401/200) and /websockify (401/401/101) auth: ok"
 
-# VNC RFB auth check (security type 2, never None)
+# VNC RFB auth check (security type 2, never None) + full Extended Clipboard & legacy CutText protocol suite
 check_vnc_requires_auth "$VNC_PORT_1"
+python3 "${SCRIPT_DIR}/test_rfb_clipboard.py" --host 127.0.0.1 --port "$VNC_PORT_1" --password "$GEN_VNC"
+
+# Headless Chromium (Playwright) noVNC Basic Auth + VNC Auth + live bidirectional clipboard test
+if [ -n "$PLAYWRIGHT_PY" ]; then
+  "$PLAYWRIGHT_PY" "${SCRIPT_DIR}/test_novnc_playwright.py" \
+    --web-url "http://127.0.0.1:${WEB_PORT_1}" \
+    --web-user "$GEN_USER" \
+    --web-password "$GEN_PASS" \
+    --vnc-host 127.0.0.1 \
+    --vnc-port "$VNC_PORT_1" \
+    --vnc-password "$GEN_VNC"
+else
+  echo "Playwright not installed locally; skipping browser noVNC test (mandatory in CI)."
+fi
 
 # Verify QEMU args (safe GPU, password=on, virtio-serial, qemu-vdagent, com.redhat.spice.0),
 # live QMP query-chardev, required binaries/modules/keyrings, and noVNC clipboard UI.
@@ -260,7 +294,14 @@ docker exec "$C1" bash -ceu '
   test -s /var/drivers.txz
   test -s /usr/share/novnc/vnc.html
   grep -q "noVNC_clipboard_send_button" /usr/share/novnc/vnc.html
+  grep -q "noVNC_clipboard_read_button" /usr/share/novnc/vnc.html
+  grep -q "noVNC_clipboard_copy_button" /usr/share/novnc/vnc.html
+  grep -q "noVNC_clipboard_status" /usr/share/novnc/vnc.html
+  grep -q "noVNC_setting_clipboard_sync" /usr/share/novnc/vnc.html
   grep -q "clipboardPasteFrom" /usr/share/novnc/app/ui.js
+  grep -q "clipboardReadFromDevice" /usr/share/novnc/app/ui.js
+  grep -q "handleCanvasClipboardKeydown" /usr/share/novnc/app/ui.js
+  grep -q "extendedClipboardSupported" /usr/share/novnc/core/rfb.js
   test -s /etc/fnxvm/keys/debian-cd.gpg
   test -s /etc/fnxvm/keys/ubuntu-cd.gpg
   test -s /etc/fnxvm/keys/omarchy.gpg
@@ -411,6 +452,7 @@ docker run -d \
   -e WEB_PASSWORD_FILE=/run/secrets/web_pw \
   -e VNC_PASSWORD_FILE=/run/secrets/vnc_pw \
   -e GPU=virtio \
+  -e RDP=Y \
   -e KVM=N \
   -e NETWORK=user \
   -e RAM_SIZE=256M \
@@ -446,9 +488,106 @@ docker exec -e SMOKE_VNC_PW="$SMOKE_VNC_PW" "$C3" bash -ceu '
   else
     echo "$cmdline" | grep -q -- "-device virtio-gpu-pci"
   fi
+  # Verify RDP=Y forwards 3389 TCP and UDP in user-mode networking (passt or slirp)
+  if ! echo "$cmdline" | grep -q "hostfwd=tcp::3389-"; then
+    if ! ps -ef | grep -E "passt.*-t [^ ]*3389" | grep -vq grep; then
+      echo "ERROR: expected RDP=Y to forward 3389/tcp in user-mode networking" >&2
+      echo "cmdline: $cmdline" >&2
+      ps -ef >&2
+      exit 1
+    fi
+  fi
 '
-echo "WEB_PASSWORD_FILE + VNC_PASSWORD_FILE + GPU=virtio: ok"
+echo "WEB_PASSWORD_FILE + VNC_PASSWORD_FILE + GPU=virtio + RDP=Y: ok"
 docker rm -f "$C3" >/dev/null
+
+# ==============================================================================
+# 3b. Built-in HTTPS/WSS (WEB_TLS=Y) + persisted self-signed ECDSA cert + WSS
+# ==============================================================================
+mkdir -p "${TMPDIR_SMOKE}/storage-tls"
+C5="fnxvm-smoke-c5-${TAG_PID}"
+CONTAINERS+=("$C5")
+docker run -d \
+  --name "$C5" \
+  -p 127.0.0.1::8006 \
+  -p 127.0.0.1::5900 \
+  -v "${TMPDIR_SMOKE}/boot.img:/boot.img" \
+  -v "${TMPDIR_SMOKE}/storage-tls:/storage" \
+  -v "${TMPDIR_SMOKE}/secrets/web_pw:/run/secrets/web_pw:ro" \
+  -v "${TMPDIR_SMOKE}/secrets/vnc_pw:/run/secrets/vnc_pw:ro" \
+  -e WEB_TLS=Y \
+  -e WEB_TLS_SAN="DNS:vm.example.test,IP:192.0.2.10" \
+  -e WEB_USER=tlsadmin \
+  -e WEB_PASSWORD_FILE=/run/secrets/web_pw \
+  -e VNC_PASSWORD_FILE=/run/secrets/vnc_pw \
+  -e KVM=N \
+  -e NETWORK=user \
+  -e RAM_SIZE=256M \
+  -e CPU_CORES=1 \
+  -e DISK_SIZE=1G \
+  -e BOOT_MODE=uefi \
+  "$IMAGE" >/dev/null
+
+echo -n "healthcheck (WEB_TLS=Y self-signed HTTPS/WSS): "
+wait_healthy "$C5"
+echo "healthy"
+wait_qemu_ready "$C5"
+
+TLS_CRT="${TMPDIR_SMOKE}/storage-tls/.fnxvm-tls.crt"
+TLS_KEY="${TMPDIR_SMOKE}/storage-tls/.fnxvm-tls.key"
+test -s "$TLS_CRT" && test -s "$TLS_KEY" || { echo "missing persisted TLS cert/key" >&2; exit 1; }
+[ "$(stat -c '%a' "$TLS_KEY")" = "600" ] || { echo "expected 0600 on ${TLS_KEY}" >&2; exit 1; }
+TLS_TEXT="$(openssl x509 -in "$TLS_CRT" -noout -text)"
+echo "$TLS_TEXT" | grep -q "DNS:vm.example.test" || { echo "missing custom DNS SAN in TLS cert" >&2; exit 1; }
+echo "$TLS_TEXT" | grep -q "IP Address:192.0.2.10" || { echo "missing custom IP SAN in TLS cert" >&2; exit 1; }
+TLS_FP_1="$(openssl x509 -in "$TLS_CRT" -noout -fingerprint -sha256)"
+
+WEB_PORT_5="$(docker port "$C5" 8006/tcp | head -n 1 | awk -F: '{print $NF}')"
+VNC_PORT_5="$(docker port "$C5" 5900/tcp | head -n 1 | awk -F: '{print $NF}')"
+[ "$(curl -ksS -o /dev/null -w '%{http_code}' "https://127.0.0.1:${WEB_PORT_5}/")" = "401" ]
+[ "$(curl -ksS -u "tlsadmin:invalid" -o /dev/null -w '%{http_code}' "https://127.0.0.1:${WEB_PORT_5}/")" = "401" ]
+[ "$(curl -ksS -u "tlsadmin:${SMOKE_WEB_PW}" -o /dev/null -w '%{http_code}' "https://127.0.0.1:${WEB_PORT_5}/")" = "200" ]
+check_ws_upgrade "$WEB_PORT_5" "" "" "401" "1"
+check_ws_upgrade "$WEB_PORT_5" "tlsadmin" "$SMOKE_WEB_PW" "101" "1"
+
+if [ -n "$PLAYWRIGHT_PY" ]; then
+  "$PLAYWRIGHT_PY" "${SCRIPT_DIR}/test_novnc_playwright.py" \
+    --web-url "https://127.0.0.1:${WEB_PORT_5}" \
+    --web-user tlsadmin \
+    --web-password "$SMOKE_WEB_PW" \
+    --vnc-host 127.0.0.1 \
+    --vnc-port "$VNC_PORT_5" \
+    --vnc-password "$SMOKE_VNC_PW" \
+    --tls-only
+fi
+docker rm -f "$C5" >/dev/null
+
+# Verify persisted TLS certificate is reused across restarts
+C5B="fnxvm-smoke-c5b-${TAG_PID}"
+CONTAINERS+=("$C5B")
+docker run -d \
+  --name "$C5B" \
+  -p 127.0.0.1::8006 \
+  -v "${TMPDIR_SMOKE}/boot.img:/boot.img" \
+  -v "${TMPDIR_SMOKE}/storage-tls:/storage" \
+  -v "${TMPDIR_SMOKE}/secrets/web_pw:/run/secrets/web_pw:ro" \
+  -v "${TMPDIR_SMOKE}/secrets/vnc_pw:/run/secrets/vnc_pw:ro" \
+  -e WEB_TLS=Y \
+  -e WEB_USER=tlsadmin \
+  -e WEB_PASSWORD_FILE=/run/secrets/web_pw \
+  -e VNC_PASSWORD_FILE=/run/secrets/vnc_pw \
+  -e KVM=N \
+  -e NETWORK=user \
+  -e RAM_SIZE=256M \
+  -e CPU_CORES=1 \
+  -e DISK_SIZE=1G \
+  -e BOOT_MODE=uefi \
+  "$IMAGE" >/dev/null
+wait_healthy "$C5B"
+TLS_FP_2="$(openssl x509 -in "$TLS_CRT" -noout -fingerprint -sha256)"
+[ "$TLS_FP_1" = "$TLS_FP_2" ] || { echo "TLS cert changed across restart!" >&2; exit 1; }
+echo "WEB_TLS=Y (HTTPS/WSS 401/200/101, SAN, 0600 key, cert persistence): ok"
+docker rm -f "$C5B" >/dev/null
 
 # ==============================================================================
 # 4. GPU=virgl without /dev/dri (graceful fallback, no crash) + CLIPBOARD=N + WEB_AUTH=N
@@ -541,6 +680,26 @@ echo "negative invalid GPU test: ok"
 docker run --rm -e RESOLVE_ONLY=1 -e OS=debian -e DESKTOP=gnome "$IMAGE" | grep -q "^ISO URL:"
 docker run --rm -e RESOLVE_ONLY=1 -e BOOT="https://example.invalid/custom.iso" "$IMAGE" | grep -q "https://example.invalid/custom.iso"
 echo "RESOLVE_ONLY=1 and custom BOOT: ok"
+
+# Windows unattended spice-vdagent staging helper: live official SHA-256 verify + fail-closed mismatch test
+docker run --rm --entrypoint bash "$IMAGE" -ceu '
+  . /run/utils.sh
+  . /run/windows/answer.sh
+  stage="$(mktemp -d)"
+  trap "rm -rf \"$stage\"" EXIT
+  stageWindowsVdagent "/run/assets/win11x64.xml" "$stage"
+  test -s "$stage/\$OEM\$/\$\$/Setup/Scripts/spice-vdagent.msi"
+  stageSetupCompleteWrapper "$stage"
+  grep -q "spice-vdagent.msi" "$stage/\$OEM\$/\$\$/Setup/Scripts/SetupComplete.cmd"
+  # Negative test: corrupted payload must fail closed
+  bad="$stage/bad.msi"
+  printf "corrupted" > "$bad"
+  if verifyWindowsVdagentSha256 "$bad" "spice-vdagent-x64-0.10.0.msi" "77629435705bc27dd7d2525e9d2084f72dbab5fdbf310e812f91332fe18d00eb" "" 2>/dev/null; then
+    echo "ERROR: verifyWindowsVdagentSha256 accepted corrupted file!" >&2
+    exit 1
+  fi
+'
+echo "Windows unattended spice-vdagent MSI staging + fail-closed SHA-256 test: ok"
 
 # ==============================================================================
 # 6. Full dynamic OS resolver + HTTP 200 verification for all 7 supported guests

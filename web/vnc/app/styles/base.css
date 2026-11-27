@@ -772,16 +772,52 @@ html {
 :root:not(.noVNC_connected) #noVNC_clipboard_button {
     display: none;
 }
+#noVNC_clipboard_button.noVNC_clipboard_pending {
+    border-color: #ffd54f;
+    box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.75);
+}
+#noVNC_clipboard_status {
+    font-size: 0.85em;
+    line-height: 1.35;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    max-width: 360px;
+    box-sizing: border-box;
+    word-wrap: break-word;
+}
+#noVNC_clipboard_status.noVNC_clipboard_warn {
+    background: #fef9c3;
+    border-color: #eab308;
+    color: #713f12;
+}
 #noVNC_clipboard_text {
     width: 360px;
     min-width: 150px;
-    height: 160px;
+    height: 140px;
     min-height: 70px;
 
     box-sizing: border-box;
     max-width: 100%;
     /* minus approximate height of title, height of subtitle, and margin */
-    max-height: calc(100vh - 10em - 25px);
+    max-height: calc(100vh - 14em - 25px);
+}
+.noVNC_clipboard_actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 360px;
+}
+.noVNC_clipboard_actions input[type=button] {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 120px;
+}
+.noVNC_clipboard_sync {
+    font-size: 0.9em;
+    white-space: normal !important;
+    max-width: 360px;
 }
 
 /* Settings */

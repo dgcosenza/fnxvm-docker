@@ -183,9 +183,13 @@ configureMachine() {
   local usb=""
   disabled "$USB" && usb=",usb=off"
 
-  # Let QEMU select the newest available GIC while exposing the GICv2m MSI
-  # frame required by guests that cannot use ITS-based interrupts.
-  MAC_OPTS="-machine type=${MACHINE},secure=${secure},gic-version=max,msi=gicv2m"
+  # Let QEMU select the newest available GIC. Append msi=gicv2m only on QEMU
+  # versions that expose the virt machine's msi property (QEMU 11+).
+  local msi_opt=""
+  if qemu-system-aarch64 -machine "${MACHINE},help" 2>/dev/null | grep -q '^msi='; then
+    msi_opt=",msi=gicv2m"
+  fi
+  MAC_OPTS="-machine type=${MACHINE},secure=${secure},gic-version=max${msi_opt}"
   MAC_OPTS+="${usb}$RAM_MACHINE_OPTS,dump-guest-core=off${KVM_OPTS}"
 
   [ -n "$UUID" ] && ID_OPTS+=" -uuid $UUID"

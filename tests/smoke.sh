@@ -38,7 +38,7 @@ docker run -d \
   --name "$NAME" \
   -p 127.0.0.1::8006 \
   -p 127.0.0.1::5900 \
-  -v "${TMPDIR_SMOKE}/boot.img:/boot.img:ro" \
+  -v "${TMPDIR_SMOKE}/boot.img:/boot.img" \
   -e KVM=N \
   -e NETWORK=user \
   -e RAM_SIZE=256M \

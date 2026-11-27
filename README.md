@@ -1,16 +1,33 @@
 # FNXVM — Multi-OS Virtual Machines in a Container
 
-[![Build](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/daily.yml/badge.svg)](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/daily.yml)
-[![Packaging](https://img.shields.io/badge/packaging-MIT-blue.svg)](LICENSE)
-[![Upstream](https://img.shields.io/badge/upstream-MIT-lightgrey.svg)](THIRD-PARTY-NOTICES.md)
-[![Signed](https://img.shields.io/badge/signed-cosign-blue.svg)](https://github.com/dgcosenza/fnxvm-docker)
-[![SLSA](https://img.shields.io/badge/SLSA-Build%20L3-brightgreen.svg)](https://github.com/dgcosenza/fnxvm-docker/attestations)
-[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue.svg)](https://github.com/dgcosenza/fnxvm-docker)
-[![Scorecard](https://api.securityscorecards.dev/projects/github.com/dgcosenza/fnxvm-docker/badge)](https://securityscorecards.dev/viewer/?uri=github.com/dgcosenza/fnxvm-docker)
+[![Daily CI](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/daily.yml/badge.svg)](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/daily.yml)
+[![OpenSSF Scorecard Workflow](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/scorecard.yml/badge.svg)](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/scorecard.yml)
+[![Gitleaks Secret Scan](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/gitleaks.yml)
+[![Public Content Check](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/public-check.yml/badge.svg)](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/public-check.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dgcosenza/fnxvm-docker/badge)](https://scorecard.dev/viewer/?uri=github.com/dgcosenza/fnxvm-docker)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17182/badge)](https://www.bestpractices.dev/projects/17182)
-[![Hub pulls](https://img.shields.io/docker/pulls/dgcosenza/fnxvm.svg)](https://hub.docker.com/r/dgcosenza/fnxvm)
-[![Image size](https://img.shields.io/docker/image-size/dgcosenza/fnxvm/latest.svg)](https://hub.docker.com/r/dgcosenza/fnxvm/tags)
-[![Version](https://img.shields.io/badge/version-6.06.5-blue.svg)](CHANGELOG.md)
+
+[![Trivy + Grype: 0 Fixable CVEs](https://img.shields.io/badge/Trivy%20%2B%20Grype-0%20fixable%20CVEs-brightgreen?logo=trivy&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/security/code-scanning)
+[![Signed: Cosign OIDC](https://img.shields.io/badge/signed-Cosign%20OIDC-blueviolet)](https://github.com/dgcosenza/fnxvm-docker#security)
+[![SLSA Build L3](https://img.shields.io/badge/SLSA-Build%20L3-brightgreen)](https://github.com/dgcosenza/fnxvm-docker/attestations)
+[![SBOM: SPDX + CycloneDX](https://img.shields.io/badge/SBOM-SPDX%20%2B%20CycloneDX-0A7BBB?logo=spdx&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/releases/latest)
+[![Base OS](https://img.shields.io/badge/base-Debian%2013%20(trixie--slim)-A81D33?logo=debian&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/blob/main/Dockerfile)
+[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-007ec6?logo=linux&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker#supported-architectures)
+[![Healthcheck: CI Verified](https://img.shields.io/badge/healthcheck-CI%20verified-brightgreen?logo=docker&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker#healthcheck)
+[![Renovate Enabled](https://img.shields.io/badge/renovate-enabled-1A1F6C?logo=renovate&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/blob/main/renovate.json)
+[![Dependabot Enabled](https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/blob/main/.github/dependabot.yml)
+[![Daily Rebuilds](https://img.shields.io/badge/rebuilds-daily-2088FF?logo=githubactions&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/actions/workflows/daily.yml)
+
+[![Latest Release](https://img.shields.io/github/v/release/dgcosenza/fnxvm-docker?label=version&logo=github)](https://github.com/dgcosenza/fnxvm-docker/releases/latest)
+[![Release Date](https://img.shields.io/github/release-date/dgcosenza/fnxvm-docker?label=released&logo=github)](https://github.com/dgcosenza/fnxvm-docker/releases/latest)
+[![Last Commit](https://img.shields.io/github/last-commit/dgcosenza/fnxvm-docker?logo=github)](https://github.com/dgcosenza/fnxvm-docker/commits/main)
+[![Docker Pulls](https://img.shields.io/docker/pulls/dgcosenza/fnxvm?logo=docker&logoColor=white)](https://hub.docker.com/r/dgcosenza/fnxvm)
+[![Docker Image Size](https://img.shields.io/docker/image-size/dgcosenza/fnxvm/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/dgcosenza/fnxvm)
+[![Registries: Docker Hub + GHCR](https://img.shields.io/badge/registries-Docker%20Hub%20%2B%20GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/pkgs/container/fnxvm)
+[![Packaging License: MIT](https://img.shields.io/badge/packaging-MIT-blue?logo=opensourceinitiative&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/blob/main/LICENSE)
+[![Upstream License](https://img.shields.io/badge/upstream-MIT-green?logo=opensourceinitiative&logoColor=white)](https://github.com/dgcosenza/fnxvm-docker/blob/main/THIRD-PARTY-NOTICES.md)
+[![GitHub Issues](https://img.shields.io/github/issues/dgcosenza/fnxvm-docker?logo=github)](https://github.com/dgcosenza/fnxvm-docker/issues)
+[![FNX Labs Catalog](https://img.shields.io/badge/catalog-FNX%20Labs-0b1020?logo=githubpages&logoColor=white)](https://dgcosenza.github.io/)
 
 Maintainer: Daniel G. Cosenza from FNX Labs
 
@@ -68,7 +85,7 @@ Open `http://127.0.0.1:8006` (or `https://127.0.0.1:8006` with `WEB_TLS=Y`) and 
 
 ## Compose example
 
-Create `chmod 600` `./secrets/web_password.txt` and `./secrets/vnc_password.txt` first (full file: [`docker-compose.example.yml`](docker-compose.example.yml)):
+Create `chmod 600` `./secrets/web_password.txt` and `./secrets/vnc_password.txt` first (full file: [`docker-compose.example.yml`](https://github.com/dgcosenza/fnxvm-docker/blob/main/docker-compose.example.yml)):
 
 ```yaml
 services:
@@ -106,66 +123,34 @@ volumes:
 
 ## Authentication
 
-- **Web UI (`8006`):** nginx HTTP Basic Auth + **bcrypt** protects `/`, `/vnc.html`, `/websockify`, `/status`, and `/audio`. Configure `WEB_USER` (default `fnxvm`) + `WEB_PASSWORD_FILE`/`WEB_PASSWORD` (separate from Windows `USERNAME`/`PASSWORD`). When unset, generates a 24-char secret printed **once** and persists only its bcrypt hash (`0600`) in `/storage/.fnxvm-web.htpasswd`. Rotate by deleting that file or setting `WEB_PASSWORD_FILE`. `WEB_AUTH=N` disables auth with a loud warning (use only behind an authenticating proxy).
-- **VNC (`5900`):** Always launched with `password=on` (RFB security type `2`, never `None`), set over private QMP (`set_password`, never in `/proc/<pid>/cmdline`). Set `VNC_PASSWORD_FILE`/`VNC_PASSWORD`; when unset, generates an **independent** 8-char secret printed **once** and persisted `0600` in `/storage/.fnxvm-vnc.secret`. **RFB caps passwords at 8 chars and is unencrypted — do not expose `5900` publicly**; use noVNC over TLS.
+- **Web UI (`8006`):** nginx Basic Auth + bcrypt protects `/`, `/vnc.html`, `/websockify`, `/status`, `/audio`. Configure `WEB_USER` (`fnxvm`) + `WEB_PASSWORD_FILE`/`WEB_PASSWORD` (if unset, auto-generates a 24-char secret printed once; bcrypt hash persisted `0600` in `/storage/.fnxvm-web.htpasswd`). `WEB_AUTH=N` disables auth (proxy-only).
+- **VNC (`5900`):** Always `password=on` (RFB type `2`) via QMP `set_password` (`VNC_PASSWORD_FILE`/`VNC_PASSWORD`, or auto-generated 8-char secret in `/storage/.fnxvm-vnc.secret`). **Never expose `5900` publicly** (unencrypted, 8-char cap); use noVNC over TLS.
 
 ## Clipboard
 
-Universal bidirectional copy/paste across **noVNC (`8006`)**, **VNC (`5900`)**, and **RDP (`3389`)**. With `CLIPBOARD=Y` (default), QEMU attaches `virtio-serial-pci` + `virtserialport` (`com.redhat.spice.0`) backed by `-chardev qemu-vdagent,id=vdagent,name=vdagent,clipboard=on` (or `spicevmc` when `SPICE=Y`).
+Bidirectional copy/paste across **noVNC (`8006`)**, **VNC (`5900`)**, and **RDP (`3389`)** via `virtio-serial-pci` + `qemu-vdagent` (`CLIPBOARD=Y`, or `spicevmc` with `SPICE=Y`).
 
-### Access method × guest OS
-
-| Guest `OS` | noVNC (`8006`) | VNC (`5900`) | RDP (`3389`) | Guest setup / limits |
+| Guest `OS` | noVNC (`8006`) | VNC (`5900`)\* | RDP (`3389`) | Guest setup / notes |
 | --- | --- | --- | --- | --- |
-| `windows` | **Bidirectional UTF-8** | **Bidirectional UTF-8**\* | **Native (`rdpclip`)** | `vioserial` staged; `spice-vdagent` MSI auto-downloaded & SHA-256 verified at runtime on x64/x86 (`WINDOWS_VDAGENT=Y`, never bundled). ARM64: native RDP or manual guest tools. |
-| `debian` | **Bidirectional UTF-8** | **Bidirectional UTF-8**\* | **Optional (`xrdp`)** | `spice-vdagent` preinstalled on live ISOs; `RDP=Y` forwards `3389` in user-mode networking. |
-| `ubuntu` | **Bidirectional UTF-8** | **Bidirectional UTF-8**\* | **Optional (GNOME RDP / `xrdp`)** | `spice-vdagent` via apt; Ubuntu 26.04 also has native Wayland RDP in *Settings -> System -> Remote Desktop*. |
-| `omarchy` | **Bidirectional UTF-8** | **Bidirectional UTF-8**\* | **Optional (`xrdp` X11)** | Install `spice-vdagent`; Hyprland Wayland may need XWayland / `wl-clipboard`; **Type (ASCII)** always works. |
-| `freebsd` | **Type (ASCII)** | Unsupported (no vdagent) | **Optional (`xrdp` X11)** | No FreeBSD `spice-vdagent` pkg; install `xrdp` + `xorgxrdp` for bidirectional RDP clipboard, or use SSH / `/shared`. |
-| `daemonarchy` | **Type (ASCII)** | Unsupported (no vdagent) | **Optional (`xrdp` X11)** | No `spice-vdagent` on FreeBSD 16.0-CURRENT; Hyprland is Wayland-only (X11 RDP via `xrdp`, or SSH / `/shared`). |
-| `haiku` | **Type (ASCII)** | Unsupported | Unsupported | No vdagent or RDP server; use **Type (ASCII)** or `/shared`. |
+| `windows` | **UTF-8 bidir** | **UTF-8 bidir** | **Native (`rdpclip`)** | Auto-stages SHA-256-verified `spice-vdagent` MSI on x64/x86 (`WINDOWS_VDAGENT=Y`); ARM64 uses native RDP. |
+| `debian` / `ubuntu` | **UTF-8 bidir** | **UTF-8 bidir** | **Optional (`xrdp`)** | `spice-vdagent` (preinstalled on Debian live); `RDP=Y` forwards `3389`; Ubuntu 26.04 adds native Wayland RDP. |
+| `omarchy` | **UTF-8 bidir** | **UTF-8 bidir** | **Optional (`xrdp`)** | Install `spice-vdagent`; Wayland may need XWayland/`wl-clipboard`; **Type (ASCII)** always works. |
+| `freebsd` / `daemonarchy` | **Type (ASCII)** | Unsupported | **Optional (`xrdp`)** | No FreeBSD `spice-vdagent`; use `xrdp` + `xorgxrdp` for bidirectional RDP clipboard, or SSH/`/shared`. |
+| `haiku` | **Type (ASCII)** | Unsupported | Unsupported | No vdagent/RDP; use **Type (ASCII)** or `/shared`. |
 
-\*QEMU's VNC server sends guest->client updates **only** to clients negotiating **RFB Extended Clipboard (`0xC0A1E5CE`)**. Legacy-only VNC clients can send ISO-8859-1 `ClientCutText` (client->guest) only.
+\*QEMU sends guest->client VNC updates only to clients supporting **RFB Extended Clipboard (`0xC0A1E5CE`)**. Recommended clients: **Chrome/Edge/Safari/Firefox** on **noVNC (HTTPS/localhost)**; **TigerVNC** or **Remmina** for VNC (avoid macOS Screen Sharing, TightVNC, UltraVNC); **mstsc.exe** / **Windows App** / **Remmina** / `xfreerdp3 +clipboard` for RDP.
 
-### Client platform recommendations
-
-| Client OS | Web / noVNC (`8006`, HTTPS or localhost) | VNC client (`5900`) | RDP client (`3389`) |
-| --- | --- | --- | --- |
-| **Windows** | Chrome/Edge (auto-sync + `Ctrl+V`); Firefox (panel / **Paste from Device**) | **TigerVNC** (full UTF-8) | Built-in `mstsc.exe` |
-| **macOS** | Chrome/Edge (`Cmd+V` + auto-sync); Safari (**Paste from Device** / **Copy from VM**) | **TigerVNC** (`brew install --cask tigervnc-viewer`); *avoid macOS Screen Sharing* (prefers Apple ARD auth 30, lacks Extended Clipboard) | **Windows App** (App Store) |
-| **Linux** | Chrome/Chromium (auto-sync + `Ctrl+V`); Firefox (panel / buttons) | **TigerVNC** or **Remmina** (`libvncclient >= 0.9.14`) | **Remmina** or `xfreerdp3 /v:127.0.0.1 +clipboard` |
-| **ChromeOS** | Chrome (auto-sync + `Ctrl+V` over HTTPS) | **noVNC (HTTPS)** | **Windows App** (Android) / Remmina (Crostini) |
-| **Android** | Chrome (**Paste from Device** / **Copy from VM** over HTTPS) | `bVNC` / RealVNC (legacy CutText limits; prefer noVNC HTTPS) | **Windows App** (Play Store) |
-| **iOS / iPadOS** | Safari (**Paste from Device** / **Copy from VM** over HTTPS) | RealVNC / RVNC (legacy CutText limits; prefer noVNC HTTPS) | **Windows App** (App Store) |
-
-**Other VNC clients:** **TightVNC** and **UltraVNC** do not implement standard RFB Extended Clipboard (client->guest Latin-1 works; guest->client does not). **RealVNC Viewer** supports RFB Auth (type 2), with Extended Clipboard varying by release; use **TigerVNC**, **Remmina**, **noVNC (HTTPS)**, or **RDP** for guaranteed bidirectional UTF-8.
-
-### Browser clipboard, Type fallback, & HTTPS (`WEB_TLS=Y` or TLS proxy)
-
-- **Secure context requirement:** Browsers expose `navigator.clipboard` (`readText`/`writeText`) only over **HTTPS**, `http://localhost`, or `http://127.0.0.1`. On plain HTTP LAN URLs, the Clipboard panel still works (**Copy to VM**, **Copy from VM**, **Type (ASCII)**).
-- **Bidirectional flow:** Guest copies fill `#noVNC_clipboard_text` automatically and write to your device clipboard when permitted; if a browser (Safari/Firefox/mobile) requires a user tap, the Clipboard button highlights for one-tap **Copy from VM**. Client->guest supports focus/click auto-sync (when `clipboard-read` is granted), `Ctrl+V`/`Cmd+V` without overwriting in-VM copies, native DOM `paste`, and **Paste from Device**.
-- **Type (ASCII) fallback:** Sends US-QWERTY hardware keystrokes for agentless guests (`freebsd`, `daemonarchy`, `haiku`, UEFI/TTY). Non-ASCII characters are skipped with a status notice and non-US guest keymaps affect punctuation; use **Copy to VM** (with agent) or **RDP** for Unicode.
-- **Built-in TLS (`WEB_TLS=Y`):** Serves HTTPS/WSS directly on `8006` with a persisted ECDSA P-256 self-signed cert in `/storage/.fnxvm-tls.{crt,key}` (add hostnames/IPs via `WEB_TLS_SAN="DNS:vm.example.test,IP:192.0.2.10"`, or mount PEMs via `WEB_TLS_CERT`/`WEB_TLS_KEY`). For a CA-trusted cert behind a reverse proxy (Caddy):
-
-```caddyfile
-vm.example.test {
-    reverse_proxy 127.0.0.1:8006
-}
-```
-
-### One-line guest agent & RDP setup
-
-- **Debian / Ubuntu (`spice-vdagent`):** `sudo apt update && sudo apt install -y spice-vdagent`
-- **Debian / Ubuntu (`xrdp`):** `sudo apt update && sudo apt install -y xrdp xorgxrdp && sudo systemctl enable --now xrdp`
-- **Omarchy (`spice-vdagent`):** `sudo pacman -S --noconfirm spice-vdagent && sudo systemctl enable --now spice-vdagentd`
-- **FreeBSD / Daemonarchy (`xrdp` X11):** `sudo pkg install -y xrdp xorgxrdp && sudo sysrc xrdp_enable=YES xrdp_sesman_enable=YES && sudo service xrdp start && sudo service xrdp-sesman start` (verify `cliprdr=true` in `/usr/local/etc/xrdp/xrdp.ini`)
-- **Windows (existing VM / manual):** automatic on fresh x64/x86 installs (`WINDOWS_VDAGENT=Y`); manually install `spice-vdagent-x64-0.10.0.msi` (`msiexec /i spice-vdagent-x64-0.10.0.msi /qn /norestart`) from [spice-space.org](https://www.spice-space.org/download/windows/vdagent/vdagent-win-0.10.0/) or Fedora's `virtio-win-guest-tools.exe /install /quiet /norestart ACCEPTEULA=1` from [fedorapeople.org](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/).
+- **Browser Clipboard & TLS (`WEB_TLS=Y`):** Async Clipboard API requires HTTPS or `localhost` (plain HTTP LAN still supports manual panel actions + US-QWERTY **Type (ASCII)** fallback). `WEB_TLS=Y` persists an ECDSA P-256 cert in `/storage/.fnxvm-tls.{crt,key}` (customize via `WEB_TLS_SAN`, `WEB_TLS_CERT`/`WEB_TLS_KEY`, or terminate TLS in a reverse proxy).
+- **Guest agent / RDP one-liners:**
+  - Debian/Ubuntu: `sudo apt update && sudo apt install -y spice-vdagent` (or `xrdp xorgxrdp && sudo systemctl enable --now xrdp`)
+  - Omarchy: `sudo pacman -S --noconfirm spice-vdagent && sudo systemctl enable --now spice-vdagentd`
+  - FreeBSD/Daemonarchy: `sudo pkg install -y xrdp xorgxrdp && sudo sysrc xrdp_enable=YES xrdp_sesman_enable=YES && sudo service xrdp start && sudo service xrdp-sesman start`
+  - Windows manual: `spice-vdagent-x64-0.10.0.msi` ([spice-space.org](https://www.spice-space.org/download/windows/vdagent/vdagent-win-0.10.0/)) or `virtio-win-guest-tools.exe` ([fedorapeople.org](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/)).
 
 ## Video acceleration (`GPU`)
 
-- **`auto` (default):** Safe software display (`VGA` on `amd64`, `ramfb` on `arm64`; Windows preserves upstream behavior; Haiku uses `VGA`) when `/dev/dri` is absent; activates `virgl` on Linux guests when an accessible `/dev/dri/renderD*` node is present.
-- **`std` / `virtio` / `qxl`:** Software VGA/ramfb; 2D VirtIO (`virtio-vga`/`virtio-gpu-pci`); or QXL (`qxl-vga` on `amd64`, pair with `SPICE=Y`).
-- **`virgl`:** Hardware OpenGL via `egl-headless` + `virtio-vga-gl`/`virtio-gpu-gl-pci`. Pass `--device /dev/dri` and render group GID (`--group-add "$(stat -c '%g' /dev/dri/renderD128)"`; optional `RENDERNODE=`). Falls back cleanly with a warning if `/dev/dri` is absent. VFIO PCIe passthrough is out of scope.
+- `auto` (default): `VGA`/`ramfb` without `/dev/dri`; auto-enables `virgl` on Linux guests when `/dev/dri/renderD*` is accessible.
+- `std` / `virtio` / `qxl` / `virgl`: Software VGA/ramfb; 2D VirtIO; QXL (`SPICE=Y`); or OpenGL `virgl` (`--device /dev/dri` + `--group-add "$(stat -c '%g' /dev/dri/renderD128)"`, optional `RENDERNODE=`; falls back cleanly if absent).
 
 ## Configuration
 
@@ -214,7 +199,7 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`)
 | Published multi-arch digest | `dgcosenza/fnxvm@sha256:2391cf506443d7b48a694e3bd5b970bf3dc450f9752a23fb195918662759f14b` |
 | GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:2391cf506443d7b48a694e3bd5b970bf3dc450f9752a23fb195918662759f14b` |
 | Supply chain | Cosign OIDC signed + SPDX & CycloneDX SBOM attestations + SLSA Build L3 provenance |
-| Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (76 upstream-unfixed C/H) |
+| Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (76 upstream-unfixed) |
 
 **Guest OS versions resolved at last build (resolved dynamically at runtime):**
 
@@ -247,7 +232,7 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`)
 - **Auth & TLS:** Web UI (`8006`, incl. `/websockify`, `/status`, `/audio`) enforces nginx Basic Auth + bcrypt (`0600` `/storage/.fnxvm-web.htpasswd`) with optional `WEB_TLS=Y` (TLS 1.2/1.3). VNC (`5900`) uses QMP `set_password` with an independent 8-char secret. Never expose `8006`, `5900`, or `3389` publicly without TLS/tunneling.
 - **0 fixable vulnerabilities (any severity):** Hard-gated by **Trivy** (`UNKNOWN`–`CRITICAL`, `--ignore-unfixed`, exit 1) + **Grype** on Syft SPDX SBOM (`--only-fixed --fail-on negligible`) on `amd64` + `arm64` (unfixed CVEs tracked in `versions.json`).
 - **Supply chain:** Digest-pinned `debian:13.8-slim` + `golang:1.27.4-trixie`, keyless Cosign OIDC (Hub + GHCR), SPDX/CycloneDX SBOMs, SLSA Build L3, Hadolint, Gitleaks, Dive (`>=95%`), OpenSSF Scorecard & Best Practices Passing, Renovate, Dependabot.
-- **Fail-closed runtime verification:** Offline vendor OpenPGP keyrings (`/etc/fnxvm/keys/*.gpg`, live-verified in CI via `gpgv` + tamper tests), SHA-256 for FreeBSD, Daemonarchy (`.iso.xz`), Haiku, and optional Windows `spice-vdagent` MSI; `VERIFY=Y` for Windows. Pinned fingerprints ([`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)):
+- **Fail-closed runtime verification:** Offline vendor OpenPGP keyrings (`/etc/fnxvm/keys/*.gpg`, live-verified in CI via `gpgv` + tamper tests), SHA-256 for FreeBSD, Daemonarchy (`.iso.xz`), Haiku, and optional Windows `spice-vdagent` MSI; `VERIFY=Y` for Windows. Pinned fingerprints ([`THIRD-PARTY-NOTICES.md`](https://github.com/dgcosenza/fnxvm-docker/blob/main/THIRD-PARTY-NOTICES.md)):
   - **Debian** ([debian.org/CD/verify](https://www.debian.org/CD/verify)): `10460DAD76165AD81FBC0CE9988021A964E6EA7D`, `DF9B9C49EAA9298432589D76DA87E80D6294BE9B`, `F41D30342F3546695F65C66942468F4009EA8AC3`
   - **Ubuntu** ([verify docs](https://ubuntu.com/tutorials/how-to-verify-ubuntu)): `843938DF228D22F7B3742BC0D94AA3F0EFE21092`
   - **Omarchy** (`omacom/omarchy` `manual/48-security.md`): `40DFB630FF42BCFFB047046CF0134EE680CAC571` (CI checks `gpgv` on `omarchy-keyring` + `.iso.sig` issuer; full ISO `.iso.sig` at runtime)
@@ -261,7 +246,7 @@ cosign verify \
 gh attestation verify oci://ghcr.io/dgcosenza/fnxvm@sha256:<digest> --owner dgcosenza
 ```
 
-Report vulnerabilities via [GitHub Security Advisories](https://github.com/dgcosenza/fnxvm-docker/security/advisories/new) ([`SECURITY.md`](SECURITY.md)).
+Report vulnerabilities via [GitHub Security Advisories](https://github.com/dgcosenza/fnxvm-docker/security/advisories/new) ([`SECURITY.md`](https://github.com/dgcosenza/fnxvm-docker/blob/main/SECURITY.md)).
 
 ## Build locally
 
@@ -282,7 +267,7 @@ docker build -t fnxvm:local .
 
 ## License
 
-Packaging: **MIT License**, Copyright (c) 2026 Daniel G. Cosenza from FNX Labs ([`LICENSE`](LICENSE)). Reused `dockur/windows` and `qemus/qemu` assets are MIT; third-party notices and vendor key details in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Guest OS media and runtime agents remain under their vendor licenses.
+Packaging: **MIT License**, Copyright (c) 2026 Daniel G. Cosenza from FNX Labs ([`LICENSE`](https://github.com/dgcosenza/fnxvm-docker/blob/main/LICENSE)). Reused `dockur/windows` and `qemus/qemu` assets are MIT; third-party notices and vendor key details in [`THIRD-PARTY-NOTICES.md`](https://github.com/dgcosenza/fnxvm-docker/blob/main/THIRD-PARTY-NOTICES.md). Guest OS media and runtime agents remain under their vendor licenses.
 
 ## Credits
 

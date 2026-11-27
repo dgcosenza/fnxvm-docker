@@ -56,6 +56,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     && curl -fsSL "https://github.com/qemus/boot-logo/archive/refs/tags/v${BOOT_LOGO_VERSION}.tar.gz" -o /tmp/boot-logo.tar.gz \
     && echo "${BOOT_LOGO_SHA256}  /tmp/boot-logo.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/boot-logo.tar.gz -C /src \
+    && go -C "/src/boot-logo-${BOOT_LOGO_VERSION}/src" mod tidy \
     && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
        go -C "/src/boot-logo-${BOOT_LOGO_VERSION}/src" build \
          -trimpath -ldflags="-s -w -X main.Version=${BOOT_LOGO_VERSION}" -o /out/boot-logo . \

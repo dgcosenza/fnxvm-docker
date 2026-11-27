@@ -203,11 +203,12 @@
                     <img alt="" src="app/images/clipboard.svg"> Clipboard
                 </div>
                 <p class="noVNC_subheading">
-                    Text entered below will be sent as keystrokes.
+                    Edit or paste below to sync with the guest clipboard (requires spice-vdagent in the guest), or send as keystrokes.
                 </p>
                 <textarea id="noVNC_clipboard_text" rows=5></textarea>
                 <br>
-                <input type="button" id="noVNC_clipboard_send_button" value="Send">
+                <input type="button" id="noVNC_clipboard_send_button" value="Copy to VM">
+                <input type="button" id="noVNC_clipboard_type_button" value="Type">
             </div>
             </div>
 

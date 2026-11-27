@@ -4,7 +4,7 @@ This container image packaging (Dockerfile, FNXVM entry/resolver/healthcheck scr
 
 FNXVM reuses and adapts scripts and assets from the following upstream open-source projects, and installs official Debian 13 (trixie) packages. All third-party components remain under their respective licenses.
 
-**Guest operating system media are NEVER bundled or redistributed in this image.** When started, the container downloads guest installation media directly from the respective official vendor endpoints (Microsoft, Haiku Project, FreeBSD Project, Debian Project, Canonical / Ubuntu, and Omarchy) and verifies vendor-published checksums and cryptographic signatures before booting. Guest operating systems are governed by their own vendor licenses and terms.
+**Guest operating system media are NEVER bundled or redistributed in this image.** When started, the container downloads guest installation media directly from the respective official vendor endpoints (Microsoft, Haiku Project, FreeBSD Project, Daemonarchy / Jordan Hubbard, Debian Project, Canonical / Ubuntu, and Omarchy) and verifies vendor-published checksums and cryptographic signatures before booting. Guest operating systems are governed by their own vendor licenses and terms (e.g., Daemonarchy original work is BSD-2-Clause and is not affiliated with Omarchy).
 
 ## Upstream Projects Adapted in Packaging
 
@@ -26,7 +26,7 @@ FNXVM reuses and adapts scripts and assets from the following upstream open-sour
 - **noVNC** (https://github.com/novnc/noVNC) — MPL-2.0 License.
 - **qemu.qmp** (https://gitlab.com/qemu-project/python-qemu-qmp) — LGPL-2.0-or-later License.
 - **VirtIO Windows Drivers** (`qemus/virtiso-whql` and `qemus/virtiso-arm`, derived from Fedora `virtio-win`) — BSD-3-Clause License.
-- **Debian 13 (trixie) packages** — QEMU (`GPL-2.0-or-later`), OVMF / AAVMF EDK2 (`BSD-2-Clause-Patent`), SeaBIOS (`LGPL-3.0-or-later`), Passt (`GPL-2.0-or-later` / `BSD-3-Clause`), swtpm (`BSD-3-Clause`), nginx (`BSD-2-Clause`), Samba (`GPL-3.0-or-later`), wimtools (`GPL-3.0-or-later` / `LGPL-3.0-or-later`), aria2 (`GPL-2.0-or-later`), tini (`MIT`), and supporting utilities. Full Debian package copyrights are located in `/usr/share/doc/*/copyright` inside the image.
+- **Debian 13 (trixie) packages** — QEMU, `qemu-system-modules-opengl`, and `qemu-system-modules-spice` (`GPL-2.0-or-later`), Mesa `libegl-mesa0` (`MIT`), OVMF / AAVMF EDK2 (`BSD-2-Clause-Patent`), SeaBIOS (`LGPL-3.0-or-later`), Passt (`GPL-2.0-or-later` / `BSD-3-Clause`), swtpm (`BSD-3-Clause`), nginx (`BSD-2-Clause`), `apache2-utils` (`Apache-2.0`), Samba (`GPL-3.0-or-later`), wimtools (`GPL-3.0-or-later` / `LGPL-3.0-or-later`), aria2 (`GPL-2.0-or-later`), tini (`MIT`), and supporting utilities. Full Debian package copyrights are located in `/usr/share/doc/*/copyright` inside the image.
 
 ## Upstream MIT License Text (dockur/windows & qemus/qemu)
 

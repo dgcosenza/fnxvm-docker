@@ -339,8 +339,14 @@ const UI = {
     addClipboardHandlers() {
         document.getElementById("noVNC_clipboard_button")
             .addEventListener('click', UI.toggleClipboardPanel);
+        document.getElementById("noVNC_clipboard_text")
+            .addEventListener('change', UI.clipboardSend);
         document.getElementById("noVNC_clipboard_send_button")
             .addEventListener('click', UI.clipboardSend);
+        const typeBtn = document.getElementById("noVNC_clipboard_type_button");
+        if (typeBtn) {
+            typeBtn.addEventListener('click', UI.clipboardType);
+        }
     },
 
     // Add a call to save settings when the element changes,
@@ -1070,16 +1076,25 @@ const UI = {
         Log.Debug("<< UI.clipboardReceive");
     },
 
-    async clipboardSend() {
+    clipboardSend() {
         const text = document.getElementById('noVNC_clipboard_text').value;
         Log.Debug(">> UI.clipboardSend: " + text.substr(0, 40) + "...");
+        if (UI.rfb) {
+            UI.rfb.clipboardPasteFrom(text);
+        }
+        Log.Debug("<< UI.clipboardSend");
+    },
+
+    async clipboardType() {
+        const text = document.getElementById('noVNC_clipboard_text').value;
+        Log.Debug(">> UI.clipboardType: " + text.substr(0, 40) + "...");
         UI.closeControlbar();
         try {
             await UI.rfb.sendText(text);
         } catch (err) {
             Log.Error("Failed to send text: " + err);
         }
-        Log.Debug("<< UI.clipboardSend");
+        Log.Debug("<< UI.clipboardType");
     },
 
 /* ------^-------

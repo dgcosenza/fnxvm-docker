@@ -63,6 +63,7 @@ def main() -> int:
 
     pin_win = pinned_arg(dockerfile, "WINDOWS_VERSION") or "6.06"
     pin_qemu = pinned_arg(dockerfile, "QEMU_VERSION") or "7.50"
+    pin_rel = pinned_arg(dockerfile, "FNXVM_RELEASE")
 
     win_rel = fetch_json("https://api.github.com/repos/dockur/windows/releases/latest", token)
     qemu_rel = fetch_json("https://api.github.com/repos/qemus/qemu/releases/latest", token)
@@ -73,7 +74,7 @@ def main() -> int:
     qemu_ver = (os.environ.get("OVERRIDE_QEMU") or "").strip().lstrip("v") or (
         (qemu_rel.get("tag_name") or pin_qemu).strip().lstrip("v")
     )
-    fnxvm_ver = win_ver
+    fnxvm_ver = f"{win_ver}.{pin_rel}" if pin_rel else win_ver
 
     deb_hub = fetch_json(f"https://hub.docker.com/v2/repositories/library/debian/tags/{DEBIAN_TAG}")
     base_digest = (deb_hub.get("digest") or "").strip()
@@ -102,6 +103,7 @@ def main() -> int:
         "windows_ltsc": resolve_guest("windows", "amd64", ["--version", "ltsc"]),
         "haiku": resolve_guest("haiku", "amd64"),
         "freebsd": resolve_guest("freebsd", "amd64"),
+        "daemonarchy": resolve_guest("daemonarchy", "amd64"),
         "debian_gnome": resolve_guest("debian", "amd64", ["--desktop", "gnome"]),
         "debian_kde": resolve_guest("debian", "amd64", ["--desktop", "kde"]),
         "ubuntu": resolve_guest("ubuntu", "amd64"),
@@ -111,6 +113,7 @@ def main() -> int:
         "windows": guest_probes["windows"].get("version") or "latest Microsoft",
         "haiku": f"{guest_probes['haiku'].get('version') or 'latest'} (amd64)",
         "freebsd": guest_probes["freebsd"].get("version") or "latest -RELEASE",
+        "daemonarchy": f"{guest_probes['daemonarchy'].get('version') or 'latest'} (FreeBSD 16.0-CURRENT, no LTS)",
         "debian": f"{guest_probes['debian_gnome'].get('version') or 'latest'} (GNOME / KDE)",
         "ubuntu": guest_probes["ubuntu"].get("version") or "latest LTS",
         "omarchy": f"{guest_probes['omarchy'].get('version') or 'latest'} (rolling, no LTS)",

@@ -7,6 +7,7 @@ set -Eeuo pipefail
 : "${QGA:=""}"
 : "${UUID:=""}"
 : "${MONITOR:=""}"
+: "${CLIPBOARD:="Y"}"
 : "${RAM_BACKEND:=""}"
 : "${KBD:="usb-kbd"}"
 : "${SOUND:="usb-audio"}"
@@ -122,6 +123,11 @@ configureMonitor() {
     MON_OPTS+=" -monitor unix:$ACPI_SOCKET,server=on,wait=off,nodelay=on"
   fi
 
+  # Private internal QMP socket for VNC/SPICE password setup and live inspection.
+  FNXVM_QMP_SOCKET="$QEMU_DIR/qmp.sock"
+  export FNXVM_QMP_SOCKET
+  MON_OPTS+=" -qmp unix:$FNXVM_QMP_SOCKET,server=on,wait=off"
+
   if [ -n "$MONITOR" ]; then
     MONITOR=$(normalizePort "$MONITOR" "telnet")
     MONITOR=$(normalizeSocket "$MONITOR")
@@ -171,6 +177,32 @@ configureGuestAgent() {
   QGA_OPTS="-chardev socket,$qga,id=qga0"
   QGA_OPTS+=" -device virtio-serial"
   QGA_OPTS+=" -device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0"
+
+  return 0
+}
+
+configureClipboard() {
+
+  CLIP_OPTS=""
+  CLIPBOARD=$(strip "${CLIPBOARD:-Y}")
+
+  disabled "$CLIPBOARD" && return 0
+
+  local bus
+  bus=$(getPciBus)
+  local qbin="${QEMU_BIN:-qemu-system-aarch64}"
+
+  if [ "${FNXVM_SPICE_ACTIVE:-N}" = "Y" ]; then
+    CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
+    CLIP_OPTS+=" -chardev spicevmc,id=vdagent,name=vdagent"
+    CLIP_OPTS+=" -device virtserialport,bus=virtio-serial-clip.0,chardev=vdagent,id=spicechannel0,name=com.redhat.spice.0"
+  elif "$qbin" -chardev help 2>/dev/null | grep -qw "qemu-vdagent"; then
+    CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
+    CLIP_OPTS+=" -chardev qemu-vdagent,id=vdagent,name=vdagent,clipboard=on"
+    CLIP_OPTS+=" -device virtserialport,bus=virtio-serial-clip.0,chardev=vdagent,id=spicechannel0,name=com.redhat.spice.0"
+  else
+    warn "CLIPBOARD=Y requested, but QEMU qemu-vdagent chardev is unavailable; clipboard sync disabled."
+  fi
 
   return 0
 }
@@ -334,7 +366,7 @@ configureCompatibility() {
 
 buildArguments() {
 
-  ARGS="-nodefaults $MEM_OPTS $MAC_OPTS $CPU_OPTS $RAM_OPTS $ID_OPTS $PID_OPTS $DISPLAY_OPTS $MON_OPTS $SERIAL_OPTS $QGA_OPTS $USB_OPTS $NET_OPTS $DISK_OPTS $BOOT_OPTS $DEV_OPTS $AUDIO_OPTS $CMP_OPTS $ARGUMENTS"
+  ARGS="-nodefaults $MEM_OPTS $MAC_OPTS $CPU_OPTS $RAM_OPTS $ID_OPTS $PID_OPTS $DISPLAY_OPTS $MON_OPTS $SERIAL_OPTS $QGA_OPTS $CLIP_OPTS $USB_OPTS $NET_OPTS $DISK_OPTS $BOOT_OPTS $DEV_OPTS $AUDIO_OPTS $CMP_OPTS $ARGUMENTS"
 
   # Collapse whitespace after optional argument groups are assembled so
   # empty features do not leave malformed spacing in the final command.
@@ -349,6 +381,7 @@ configureMemory
 configureSerial
 configureMonitor
 configureGuestAgent
+configureClipboard
 configureMachine
 configureProcessor
 

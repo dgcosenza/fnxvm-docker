@@ -204,8 +204,10 @@ jobs:
           echo "Detected (${ARCH}): Debian=${DEBIAN_VERSION}, Size=${SIZE_MB} MB"
           echo "### Image size (${ARCH}): **${SIZE_MB} MB** (${SIZE_BYTES} bytes)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke-test container and verify all 6 OS resolvers (${{ matrix.arch }})
+      - name: Smoke-test container and verify all 7 OS resolvers (${{ matrix.arch }})
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ./tests/smoke.sh "${IMAGE_NAME}:ci-candidate-${{ matrix.arch }}"
 
       - name: Install verified Dive, Syft, and Grype (${{ matrix.arch }})

@@ -1,34 +1,51 @@
 # Example Docker Compose configuration for FNXVM.
 # Maintainer: Daniel G. Cosenza from FNX Labs
 #
-# Select a guest OS with OS= (windows, haiku, freebsd, debian, ubuntu, omarchy)
+# Select a guest OS with OS= (windows, haiku, freebsd, daemonarchy, debian, ubuntu, omarchy)
 # or supply a custom image URL with BOOT=https://example.invalid/custom.iso.
 #
-# Security note: Bind the web viewer (8006), VNC (5900), and RDP (3389) to
-# 127.0.0.1 or place them behind an authenticating reverse proxy; do not expose
-# an unprotected console directly to the public Internet.
+# Security notes:
+# - Web UI (8006) requires HTTP Basic Authentication (bcrypt) by default.
+#   Provide strong passwords via Docker secret files below, or omit them on first
+#   start to auto-generate a strong password printed once in container logs.
+# - VNC (5900) requires RFB authentication (max 8 characters). Keep port 5900
+#   bound to 127.0.0.1 or omit the port mapping completely and use noVNC on 8006.
+# - Never publish 8006, 5900, or 3389 directly to the public Internet without TLS.
 
 services:
   fnxvm:
     image: dgcosenza/fnxvm:latest
     container_name: fnxvm
     environment:
-      # Supported OS values: debian | ubuntu | freebsd | haiku | omarchy | windows
+      # Supported OS values: debian | ubuntu | freebsd | daemonarchy | haiku | omarchy | windows
       OS: "debian"
       # For OS=debian: gnome (default) or kde
       DESKTOP: "gnome"
       # For OS=windows: any dockur/windows VERSION (e.g. 11, 11l, 11i, 10, 2025)
       # VERSION: "11"
-      # Protect the noVNC web viewer with HTTP Basic Auth (recommended)
-      PROTECT: "Y"
-      USERNAME: "vmadmin"
-      PASSWORD: "change-me-before-starting"
+      # Video acceleration: auto (default) | virtio | virgl | qxl | std
+      GPU: "auto"
+      # Host <-> guest clipboard via QEMU vdagent / virtio-serial (Y | N)
+      CLIPBOARD: "Y"
+      # Web UI authentication (default WEB_AUTH=Y; never collides with Windows USERNAME/PASSWORD)
+      WEB_AUTH: "Y"
+      WEB_USER: "fnxvm"
+      WEB_PASSWORD_FILE: "/run/secrets/fnxvm_web_password"
+      VNC_PASSWORD_FILE: "/run/secrets/fnxvm_vnc_password"
       RAM_SIZE: "4G"
       CPU_CORES: "2"
       DISK_SIZE: "64G"
+    secrets:
+      - fnxvm_web_password
+      - fnxvm_vnc_password
     devices:
       - /dev/kvm:/dev/kvm
       - /dev/net/tun:/dev/net/tun
+      # Optional hardware OpenGL (VirGL) render node (use with GPU=auto or GPU=virgl):
+      # - /dev/dri:/dev/dri
+    # Optional: pass host render group GID when using /dev/dri:
+    # group_add:
+    #   - "109"
     cap_drop:
       - ALL
     cap_add:
@@ -42,15 +59,23 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "127.0.0.1:8006:8006"     # noVNC web viewer
-      - "127.0.0.1:5900:5900/tcp" # VNC
-      - "127.0.0.1:3389:3389/tcp" # RDP (Windows guests)
+      - "127.0.0.1:8006:8006"     # noVNC web viewer (HTTP Basic Auth + bcrypt)
+      # VNC (RFB auth max 8 chars; omit or keep bound to 127.0.0.1 only):
+      # - "127.0.0.1:5900:5900/tcp"
+      # RDP (Windows guests; keep bound to 127.0.0.1 or private tunnel):
+      # - "127.0.0.1:3389:3389/tcp"
     volumes:
       - fnxvm_storage:/storage
       # Optional shared folder (9p for Linux/BSD guests, Samba for Windows guests):
       # - ./shared:/shared
     stop_grace_period: 2m
     restart: unless-stopped
+
+secrets:
+  fnxvm_web_password:
+    file: ./secrets/web_password.txt
+  fnxvm_vnc_password:
+    file: ./secrets/vnc_password.txt
 
 volumes:
   fnxvm_storage:

@@ -7,6 +7,20 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
 
 <!-- changelog:auto -->
 
+## [6.06.2] — 2026-11-27
+
+### Added
+- New guest OS **`OS=daemonarchy`** ([jordanhubbard/daemonarchy](https://github.com/jordanhubbard/daemonarchy), Omarchy Hyprland desktop on FreeBSD 16.0-CURRENT, not affiliated with Omarchy) with dynamic GitHub Releases resolution matching `^daemonarchy-[0-9]+\.[0-9]+\.[0-9]+$` (skipping package/checkout/extension feeds, drafts, and prereleases), graceful unauthenticated runtime fallback, fail-closed SHA-256 verification of the compressed `.iso.xz` prior to `xz -dc` decompression, and full `amd64` + `arm64` (UEFI-only community-validation) support.
+- Host <-> guest clipboard sharing (`CLIPBOARD=Y|N`, default `Y`): attaches `virtio-serial-pci` + `com.redhat.spice.0` with QEMU 10's `-chardev qemu-vdagent,id=vdagent,name=vdagent,clipboard=on` for VNC/noVNC (and `spicevmc` when optional `SPICE=Y` is active); restores native `RFB.clipboardPasteFrom()` in the noVNC Clipboard panel alongside a **Type** keystroke fallback for guests without `spice-vdagent`.
+- Configurable video acceleration via **`GPU=auto|virtio|virgl|qxl|std`** (default `auto`): installs official Debian 13 `qemu-system-modules-opengl`, `qemu-system-modules-spice`, and `libegl-mesa0`; selects safe software display devices when `/dev/dri` is absent; preserves Windows upstream defaults and Haiku VESA compatibility; gracefully falls back with a warning instead of crashing when `GPU=virgl` is requested without `/dev/dri`.
+- Authenticated-by-default console access:
+  - Web UI (`8006`, including `/websockify`, `/status`, and `/audio`) protected by nginx HTTP Basic Authentication with **bcrypt** hashes (`apache2-utils` `htpasswd -niB`), configured via `WEB_USER` (default `fnxvm`), `WEB_PASSWORD`, and `WEB_PASSWORD_FILE` (separate from Windows `USERNAME`/`PASSWORD`). Auto-generates a 24-character random password on first start, prints it once, and persists only its bcrypt hash in `/storage/.fnxvm-web.htpasswd`. Includes an explicit `WEB_AUTH=N` escape hatch with a loud startup warning.
+  - VNC (`5900`) protected by QEMU `-vnc ...,password=on` configured over a private QMP Unix socket (`set_password`) via `VNC_PASSWORD` / `VNC_PASSWORD_FILE` (defaulting to the generated/web secret's first 8 RFB characters, never exposed in `/proc/<pid>/cmdline`).
+  - Container-internal Unix-socket nginx health endpoint (`/run/shm/nginx-health.sock`) for `fnxvm-healthcheck` so no unauthenticated TCP routes exist on port `8006`.
+- Expanded `tests/smoke.sh` to verify HTTP Basic Auth (`401`/`401`/`200`) on `8006`, WebSocket auth (`401`/`401`/`101`) on `/websockify`, RFB VNC Authentication (security type `2`, never `None`) on `5900`, first-start hash persistence across restarts, `WEB_PASSWORD_FILE`/`VNC_PASSWORD_FILE` secrets, `qemu-vdagent` + `virtio-serial` in QEMU args and live QMP `query-chardev`, `GPU=auto`/`virtio`/`virgl` fallback, `CLIPBOARD=N`, `WEB_AUTH=N`, and all 7 OS resolvers.
+
+---
+
 ## [6.06] — 2026-11-27
 
 ### Automated Daily Build

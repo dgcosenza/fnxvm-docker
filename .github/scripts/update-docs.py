@@ -103,9 +103,10 @@ def update_readme(readme_path: pathlib.Path, meta: dict, bullets: list[str]) -> 
     new_text = pattern.sub(lambda _m: block, text, count=1)
     ver = meta.get("upstream_version") or ""
     if ver:
+        ver_badge = ver.replace("-", "--")
         new_text = re.sub(
             r"img\.shields\.io/badge/version-[^)]+-blue\.svg",
-            f"img.shields.io/badge/version-{ver}-blue.svg",
+            f"img.shields.io/badge/version-{ver_badge}-blue.svg",
             new_text,
             count=1,
         )

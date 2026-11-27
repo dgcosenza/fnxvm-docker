@@ -6,7 +6,8 @@
 
 ARG GO_BASE=golang:1.27.4-trixie@sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee
 ARG DEBIAN_BASE=debian:13.8-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
-ARG FNXVM_VERSION=6.06
+ARG FNXVM_VERSION=6.06.2
+ARG FNXVM_RELEASE=2
 ARG WINDOWS_VERSION=6.06
 ARG QEMU_VERSION=7.50
 ARG WEBSOCKETD_VERSION=0.4.2
@@ -192,6 +193,7 @@ RUN set -eu \
     && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
        "$@" \
        7zip \
+       apache2-utils \
        aria2 \
        bc \
        ca-certificates \
@@ -214,6 +216,7 @@ RUN set -eu \
        iputils-ping \
        jq \
        libarchive-tools \
+       libegl-mesa0 \
        libxml2-utils \
        mtools \
        net-tools \
@@ -223,6 +226,8 @@ RUN set -eu \
        pciutils \
        procps \
        python3 \
+       qemu-system-modules-opengl \
+       qemu-system-modules-spice \
        qemu-utils \
        samba \
        swtpm \
@@ -280,10 +285,14 @@ ENV PYTHONPATH="/usr/local/lib/fnxvm-python" \
     DESKTOP="gnome" \
     VERSION="" \
     BOOT="" \
+    GPU="auto" \
+    CLIPBOARD="Y" \
     RAM_SIZE="4G" \
     CPU_CORES="2" \
     DISK_SIZE="64G" \
     WEB_PORT="8006" \
+    WEB_AUTH="Y" \
+    WEB_USER="fnxvm" \
     VNC_PORT="5900"
 
 VOLUME /storage

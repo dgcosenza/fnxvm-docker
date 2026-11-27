@@ -10,7 +10,7 @@
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17182/badge)](https://www.bestpractices.dev/projects/17182)
 [![Hub pulls](https://img.shields.io/docker/pulls/dgcosenza/fnxvm.svg)](https://hub.docker.com/r/dgcosenza/fnxvm)
 [![Image size](https://img.shields.io/docker/image-size/dgcosenza/fnxvm/latest.svg)](https://hub.docker.com/r/dgcosenza/fnxvm/tags)
-[![Version](https://img.shields.io/badge/version-6.06.3-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-6.06.4-blue.svg)](CHANGELOG.md)
 
 Maintainer: Daniel G. Cosenza from FNX Labs
 
@@ -21,7 +21,7 @@ Maintainer: Daniel G. Cosenza from FNX Labs
 ## Supported tags
 
 - `latest` — latest daily verified multi-arch build (`linux/amd64` + `linux/arm64`)
-- `<version>` — release version (e.g. `6.06.3`), `<version>-<YYYYMMDD>` (immutable; `.N` on same-day rebuilds), `sha-<short>`
+- `<version>` — release version (e.g. `6.06.4`), `<version>-<YYYYMMDD>` (immutable; `.N` on same-day rebuilds), `sha-<short>`
 - Digest pinning (recommended): `dgcosenza/fnxvm@sha256:<digest>` / `ghcr.io/dgcosenza/fnxvm@sha256:<digest>` (identical Cosign-signed digests)
 
 ## Supported guest operating systems
@@ -238,15 +238,18 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`)
 
 ## Upgrade / migration
 
-- **From `6.06.2` to `6.06.3`:** Drop-in upgrade; universal noVNC clipboard is active automatically (set `WEB_TLS=Y` or use a TLS proxy for LAN HTTPS; `RDP=Y` forwards `3389` in user-mode networking for Linux/BSD).
-- **From `6.06` / `dockur/windows` / `qemux/qemu`:** Auth is ON by default (`WEB_AUTH=Y`, `WEB_USER`, `WEB_PASSWORD_FILE`, `VNC_PASSWORD_FILE`); `/storage` and sizing/OS vars remain drop-in compatible.
+- **From `6.06.3` to `6.06.4`:** Drop-in hotfix restoring complete official Debian CD signing keys (with UIDs/subkeys), cleaned Ubuntu CD key, and live CI `gpgv`/checksum verification.
+- **From `6.06.2` / earlier:** Universal noVNC clipboard is active (`WEB_TLS=Y`, `RDP=Y`); auth is ON by default (`WEB_AUTH=Y`, `WEB_USER`, `WEB_PASSWORD_FILE`, `VNC_PASSWORD_FILE`); `/storage` stays drop-in compatible.
 
 ## Security
 
-- **Auth & TLS:** Web UI (`8006`, including `/websockify`, `/status`, `/audio`) uses nginx Basic Auth + bcrypt (`0600` hash in `/storage/.fnxvm-web.htpasswd`) and optional `WEB_TLS=Y` (TLS 1.2/1.3). VNC (`5900`) uses QMP `set_password` with an independent 8-char secret. Never publish `8006`, `5900`, or `3389` publicly without TLS/tunneling.
-- **Zero fixable vulnerabilities of any severity:** Hard-gated by **Trivy** (`UNKNOWN`–`CRITICAL`, `--ignore-unfixed`, exit 1) AND **Grype** on the Syft SPDX SBOM (`--only-fixed --fail-on negligible`) on both `amd64` and `arm64`. Unfixed upstream CVEs are tracked in `versions.json`.
-- **Supply chain:** Digest-pinned `debian:13.8-slim` + `golang:1.27.4-trixie`, keyless Cosign OIDC signatures (Docker Hub + GHCR), SPDX & CycloneDX SBOM attestations, SLSA Build L3 provenance, Hadolint, Gitleaks, Dive (`>= 95%`), OpenSSF Scorecard, OpenSSF Best Practices Passing, Renovate, and Dependabot.
-- **Fail-closed runtime verification:** Offline vendor GPG keys (`gpgv`) for Debian/Ubuntu/Omarchy; SHA-256 for FreeBSD, Daemonarchy (`.iso.xz`), Haiku, and optional Windows `spice-vdagent` MSI; `VERIFY=Y` for Windows.
+- **Auth & TLS:** Web UI (`8006`, incl. `/websockify`, `/status`, `/audio`) enforces nginx Basic Auth + bcrypt (`0600` `/storage/.fnxvm-web.htpasswd`) with optional `WEB_TLS=Y` (TLS 1.2/1.3). VNC (`5900`) uses QMP `set_password` with an independent 8-char secret. Never expose `8006`, `5900`, or `3389` publicly without TLS/tunneling.
+- **0 fixable vulnerabilities (any severity):** Hard-gated by **Trivy** (`UNKNOWN`–`CRITICAL`, `--ignore-unfixed`, exit 1) + **Grype** on Syft SPDX SBOM (`--only-fixed --fail-on negligible`) on `amd64` + `arm64` (unfixed CVEs tracked in `versions.json`).
+- **Supply chain:** Digest-pinned `debian:13.8-slim` + `golang:1.27.4-trixie`, keyless Cosign OIDC (Hub + GHCR), SPDX/CycloneDX SBOMs, SLSA Build L3, Hadolint, Gitleaks, Dive (`>=95%`), OpenSSF Scorecard & Best Practices Passing, Renovate, Dependabot.
+- **Fail-closed runtime verification:** Offline vendor OpenPGP keyrings (`/etc/fnxvm/keys/*.gpg`, live-verified in CI via `gpgv` + tamper tests), SHA-256 for FreeBSD, Daemonarchy (`.iso.xz`), Haiku, and optional Windows `spice-vdagent` MSI; `VERIFY=Y` for Windows. Pinned fingerprints ([`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)):
+  - **Debian** ([debian.org/CD/verify](https://www.debian.org/CD/verify)): `10460DAD76165AD81FBC0CE9988021A964E6EA7D`, `DF9B9C49EAA9298432589D76DA87E80D6294BE9B`, `F41D30342F3546695F65C66942468F4009EA8AC3`
+  - **Ubuntu** ([verify docs](https://ubuntu.com/tutorials/how-to-verify-ubuntu)): `843938DF228D22F7B3742BC0D94AA3F0EFE21092`
+  - **Omarchy** (`omacom/omarchy` `manual/48-security.md`): `40DFB630FF42BCFFB047046CF0134EE680CAC571` (CI checks `gpgv` on `omarchy-keyring` + `.iso.sig` issuer; full ISO `.iso.sig` at runtime)
 
 ```bash
 cosign verify \
@@ -257,7 +260,7 @@ cosign verify \
 gh attestation verify oci://ghcr.io/dgcosenza/fnxvm@sha256:<digest> --owner dgcosenza
 ```
 
-Report vulnerabilities privately via [GitHub Security Advisories](https://github.com/dgcosenza/fnxvm-docker/security/advisories/new) ([`SECURITY.md`](SECURITY.md)).
+Report vulnerabilities via [GitHub Security Advisories](https://github.com/dgcosenza/fnxvm-docker/security/advisories/new) ([`SECURITY.md`](SECURITY.md)).
 
 ## Build locally
 
@@ -268,17 +271,17 @@ docker build -t fnxvm:local .
 
 ## Update policy
 
-`.github/workflows/daily.yml` runs daily with `--no-cache` on `amd64` + `arm64`: resolves upstreams, base digests, and all 7 OSes; runs container, RFB Extended Clipboard protocol, Playwright headless browser, GPU, auth, TLS, and resolver tests; gates on Dive (`>= 95%`), Trivy, and Grype (0 fixable findings of any severity); publishes identical Cosign-signed digests + SBOMs + SLSA L3 provenance to GHCR, Docker Hub, and GitHub Releases; updates `versions.json`/`README.md`/`CHANGELOG.md` and syncs Docker Hub; opens/auto-closes `ci-failure` issues.
+`.github/workflows/daily.yml` runs daily with `--no-cache` on `amd64` + `arm64`: resolves upstreams, base digests, and all 7 OSes; runs container, RFB clipboard, Playwright noVNC, GPU, auth, TLS, live `gpgv`/checksum, and resolver tests; gates on Dive (`>=95%`), Trivy, and Grype (0 fixable of any severity); publishes Cosign-signed digests + SBOMs + SLSA L3 to GHCR, Docker Hub, and Releases; updates `versions.json`/`README.md`/`CHANGELOG.md` + Hub overview; manages `ci-failure` issues.
 
 ## Design decisions
 
 - **Debian 13.8 `main` packages only:** Official QEMU, OpenGL/SPICE modules, `libegl-mesa0`, OVMF/AAVMF/SeaBIOS, Passt, swtpm, nginx, `apache2-utils`, and `openssl` keep 0 fixable CVEs without Sid snapshots or third-party `.deb` bundles.
 - **From-source helpers & isolated Python:** `websocketd`, `boot-logo` (`golang:1.27.4-trixie`), and `udfread` build from SHA-256-verified source; `qemu.qmp` runs without `pip` in runtime.
-- **Universal clipboard without heavy RDP gateways:** Fixes noVNC Extended Clipboard caps, integrates browser Async Clipboard API + non-ASCII-safe Type fallback, adds zero-bloat `WEB_TLS=Y` via existing `openssl`, and auto-stages verified `spice-vdagent` on Windows. Heavy stacks like Apache Guacamole (Java/Tomcat) or custom RDP proxies are intentionally omitted to protect image minimalism and the 0-fixable-CVE gate; use direct port `3389` over VPN/SSH tunnel or noVNC over HTTPS.
+- **Universal clipboard without heavy RDP gateways:** Fixes noVNC Extended Clipboard caps, adds browser Async Clipboard API + non-ASCII-safe Type fallback, zero-bloat `WEB_TLS=Y`, and auto-staged verified `spice-vdagent` on Windows. Heavy gateways (Guacamole) are omitted to preserve minimalism and 0 fixable CVEs; use direct `3389` over VPN/SSH or noVNC over HTTPS.
 
 ## License
 
-Packaging is licensed under the **MIT License**, Copyright (c) 2026 Daniel G. Cosenza from FNX Labs ([`LICENSE`](LICENSE)). Reused `dockur/windows` and `qemus/qemu` assets are MIT; third-party notices are in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Guest OS media and optional runtime agents remain under their vendor licenses.
+Packaging: **MIT License**, Copyright (c) 2026 Daniel G. Cosenza from FNX Labs ([`LICENSE`](LICENSE)). Reused `dockur/windows` and `qemus/qemu` assets are MIT; third-party notices and vendor key details in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Guest OS media and runtime agents remain under their vendor licenses.
 
 ## Credits
 

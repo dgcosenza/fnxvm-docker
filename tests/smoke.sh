@@ -702,13 +702,49 @@ docker run --rm --entrypoint bash "$IMAGE" -ceu '
 echo "Windows unattended spice-vdagent MSI staging + fail-closed SHA-256 test: ok"
 
 # ==============================================================================
-# 6. Full dynamic OS resolver + HTTP 200 verification for all 7 supported guests
+# 6. Bundled vendor GPG keyrings + live signature & checksum verification
 # ==============================================================================
-echo "==> resolver HTTP 200 verification (${ARCH})"
+echo "==> vendor GPG keyring & live signature/checksum verification (${ARCH})"
 GH_ENV_ARGS=()
 if [ -n "${GH_TOKEN:-}" ]; then
   GH_ENV_ARGS=(-e GH_TOKEN)
 fi
+
+# Cross-check extracted binary keyrings with host gpg --import (if installed) to
+# confirm GnuPG itself imports every pinned primary key with a valid User ID.
+if command -v gpg >/dev/null 2>&1; then
+  for spec in \
+    "debian-cd.gpg:10460DAD76165AD81FBC0CE9988021A964E6EA7D,DF9B9C49EAA9298432589D76DA87E80D6294BE9B,F41D30342F3546695F65C66942468F4009EA8AC3" \
+    "ubuntu-cd.gpg:843938DF228D22F7B3742BC0D94AA3F0EFE21092" \
+    "omarchy.gpg:40DFB630FF42BCFFB047046CF0134EE680CAC571"; do
+    kfile="${spec%%:*}"
+    fprs="${spec#*:}"
+    khome="$(mktemp -d "${TMPDIR_SMOKE}/gnupg-${kfile}.XXXXXX")"
+    chmod 700 "$khome"
+    docker run --rm --entrypoint cat "$IMAGE" "/etc/fnxvm/keys/${kfile}" > "${khome}/${kfile}"
+    GNUPGHOME="$khome" gpg --batch --import "${khome}/${kfile}"
+    klist="$(GNUPGHOME="$khome" gpg --batch --list-keys --with-colons --with-fingerprint)"
+    grep -q '^uid:' <<< "$klist" || { echo "ERROR: ${kfile} has no UID after gpg --import!" >&2; exit 1; }
+    IFS=',' read -r -a fpr_arr <<< "$fprs"
+    for fpr in "${fpr_arr[@]}"; do
+      grep -q "^fpr:::::::::${fpr}:$" <<< "$klist" || {
+        echo "ERROR: expected fingerprint ${fpr} missing from ${kfile}!" >&2
+        echo "$klist" >&2
+        exit 1
+      }
+    done
+    echo "host gpg --import cross-check (${kfile}): ok"
+  done
+fi
+
+# Execute full keyring + live gpgv (Debian amd64/arm64, Ubuntu amd64/arm64,
+# Omarchy) + Daemonarchy/FreeBSD/Haiku checksum-file verification INSIDE the image.
+docker run --rm -i "${GH_ENV_ARGS[@]}" --entrypoint python3 "$IMAGE" - < "${SCRIPT_DIR}/test_verify_keyrings.py"
+
+# ==============================================================================
+# 7. Full dynamic OS resolver + HTTP 200 verification for all 7 supported guests
+# ==============================================================================
+echo "==> resolver HTTP 200 verification (${ARCH})"
 
 docker run --rm "${GH_ENV_ARGS[@]}" --entrypoint fnxvm-resolve "$IMAGE" debian --arch "$ARCH" --desktop gnome --verify-urls
 docker run --rm "${GH_ENV_ARGS[@]}" --entrypoint fnxvm-resolve "$IMAGE" debian --arch "$ARCH" --desktop kde --verify-urls

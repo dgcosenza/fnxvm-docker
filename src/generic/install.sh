@@ -723,7 +723,7 @@ verifyFnxvmDownload() {
   local sig_url="${FNXVM_SIG_URL:-}"
   local keyring="${FNXVM_GPG_KEYRING:-}"
   local iso_name="${FNXVM_ISO_FILENAME:-$(basename -- "$file")}"
-  local actual_sha tmp_dir sums_file sig_file verified_sha
+  local actual_sha tmp_dir sums_file sig_file verified_sha gpgv_out
 
   [ -z "$method" ] && return 0
 
@@ -739,6 +739,7 @@ verifyFnxvmDownload() {
       if [ ! -s "$keyring" ]; then
         cleanup_verify
         error "GPG keyring '$keyring' is missing; failing closed!"
+        rm -f -- "$file"
         return 1
       fi
 
@@ -751,11 +752,13 @@ verifyFnxvmDownload() {
            ! curl -fsSL --max-time 30 "$sig_url" -o "$sig_file"; then
           cleanup_verify
           error "Failed to download checksum manifest or GPG signature; failing closed!"
+          rm -f -- "$file"
           return 1
         fi
-        if ! gpgv --keyring "$keyring" "$sig_file" "$sums_file" >/dev/null 2>&1; then
+        if ! gpgv_out=$(gpgv --keyring "$keyring" "$sig_file" "$sums_file" 2>&1); then
           cleanup_verify
-          error "GPG signature verification FAILED for $checksum_url; refusing to boot!"
+          error "GPG signature verification FAILED for $checksum_url; refusing to boot! (${gpgv_out})"
+          rm -f -- "$file"
           return 1
         fi
         verified_sha=$(awk -v target="$iso_name" '
@@ -767,6 +770,7 @@ verifyFnxvmDownload() {
         if [ -z "$verified_sha" ]; then
           cleanup_verify
           error "ISO '$iso_name' not found in GPG-verified SHA256SUMS; failing closed!"
+          rm -f -- "$file"
           return 1
         fi
         expected_sha="$verified_sha"
@@ -794,9 +798,9 @@ verifyFnxvmDownload() {
           rm -f -- "$file"
           return 1
         fi
-        if ! gpgv --keyring "$keyring" "$sig_file" "$file" >/dev/null 2>&1; then
+        if ! gpgv_out=$(gpgv --keyring "$keyring" "$sig_file" "$file" 2>&1); then
           cleanup_verify
-          error "Detached GPG signature verification FAILED for $file; deleting untrusted file!"
+          error "Detached GPG signature verification FAILED for $file; deleting untrusted file! (${gpgv_out})"
           rm -f -- "$file"
           return 1
         fi

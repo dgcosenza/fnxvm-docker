@@ -32,13 +32,13 @@ FNXVM_SPICE_ACTIVE="N"
 
 qemuHasDevice() {
   local out
-  out="$("$QEMU_BIN" -device help 2>&1 || true)"
+  out="$("$QEMU_BIN" -M "${MACHINE:-virt}" -device help 2>&1 || true)"
   grep -Fq "name \"$1\"" <<< "$out"
 }
 
 qemuHasDisplay() {
   local out
-  out="$("$QEMU_BIN" -display help 2>&1 || true)"
+  out="$("$QEMU_BIN" -M none -display help 2>&1 || true)"
   grep -qw "$1" <<< "$out"
 }
 

@@ -197,7 +197,7 @@ configureClipboard() {
   bus=$(getPciBus)
   local qbin="${QEMU_BIN:-qemu-system-x86_64}"
   local chardev_help
-  chardev_help="$("$qbin" -chardev help 2>&1 || true)"
+  chardev_help="$("$qbin" -M none -chardev help 2>&1 || true)"
 
   if [ "${FNXVM_SPICE_ACTIVE:-N}" = "Y" ]; then
     CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"

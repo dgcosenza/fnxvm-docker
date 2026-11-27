@@ -192,7 +192,7 @@ configureClipboard() {
   bus=$(getPciBus)
   local qbin="${QEMU_BIN:-qemu-system-aarch64}"
   local chardev_help
-  chardev_help="$("$qbin" -chardev help 2>&1 || true)"
+  chardev_help="$("$qbin" -M none -chardev help 2>&1 || true)"
 
   if [ "${FNXVM_SPICE_ACTIVE:-N}" = "Y" ]; then
     CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
@@ -220,7 +220,9 @@ configureMachine() {
   # Let QEMU select the newest available GIC. Append msi=gicv2m only on QEMU
   # versions that expose the virt machine's msi property (QEMU 11+).
   local msi_opt=""
-  if qemu-system-aarch64 -machine "${MACHINE},help" 2>/dev/null | grep -q '^msi='; then
+  local mach_help
+  mach_help="$(qemu-system-aarch64 -machine "${MACHINE},help" 2>&1 || true)"
+  if grep -q '^msi=' <<< "$mach_help"; then
     msi_opt=",msi=gicv2m"
   fi
   MAC_OPTS="-machine type=${MACHINE},secure=${secure},gic-version=max${msi_opt}"

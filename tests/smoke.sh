@@ -270,31 +270,37 @@ docker exec "$C1" bash -ceu '
   # Safe default GPU device (GPU unset / auto without /dev/dri) + OpenGL/SPICE module availability
   if [ "$(dpkg --print-architecture)" = "amd64" ]; then
     qbin="qemu-system-x86_64"
+    mach="q35"
     command -v "$qbin" >/dev/null
     test -s /usr/share/OVMF/OVMF_CODE_4M.fd
     test -s /usr/share/OVMF/OVMF_VARS_4M.fd
     grep -Fq -- "-device VGA" <<< "$cmdline" || { echo "ERROR: expected -device VGA in cmdline: $cmdline" >&2; exit 1; }
-    disp_help="$("$qbin" -display help 2>&1 || true)"
-    dev_help="$("$qbin" -device help 2>&1 || true)"
-    chr_help="$("$qbin" -chardev help 2>&1 || true)"
+    disp_help="$("$qbin" -M none -display help 2>&1 || true)"
+    dev_help="$("$qbin" -M "$mach" -device help 2>&1 || true)"
+    chr_help="$("$qbin" -M none -chardev help 2>&1 || true)"
     grep -qw "egl-headless" <<< "$disp_help" || { echo "ERROR: egl-headless missing from -display help: $disp_help" >&2; exit 1; }
     grep -Fq "name \"virtio-vga-gl\"" <<< "$dev_help" || { echo "ERROR: virtio-vga-gl missing from -device help" >&2; exit 1; }
     grep -Fq "name \"qxl-vga\"" <<< "$dev_help" || { echo "ERROR: qxl-vga missing from -device help" >&2; exit 1; }
     grep -qw "qemu-vdagent" <<< "$chr_help" || { echo "ERROR: qemu-vdagent missing from -chardev help: $chr_help" >&2; exit 1; }
-    grep -qw "spicevmc" <<< "$chr_help" || { echo "ERROR: spicevmc missing from -chardev help: $chr_help" >&2; exit 1; }
+    test -s /usr/lib/x86_64-linux-gnu/qemu/chardev-spice.so || { echo "ERROR: chardev-spice.so missing" >&2; exit 1; }
+    test -s /usr/lib/x86_64-linux-gnu/qemu/ui-spice-core.so || { echo "ERROR: ui-spice-core.so missing" >&2; exit 1; }
+    test -s /usr/lib/x86_64-linux-gnu/qemu/ui-egl-headless.so || { echo "ERROR: ui-egl-headless.so missing" >&2; exit 1; }
   else
     qbin="qemu-system-aarch64"
+    mach="virt"
     command -v "$qbin" >/dev/null
     test -s /usr/share/AAVMF/AAVMF_CODE.no-secboot.fd
     test -s /usr/share/AAVMF/AAVMF_VARS.fd
     grep -Fq -- "-device ramfb" <<< "$cmdline" || { echo "ERROR: expected -device ramfb in cmdline: $cmdline" >&2; exit 1; }
-    disp_help="$("$qbin" -display help 2>&1 || true)"
-    dev_help="$("$qbin" -device help 2>&1 || true)"
-    chr_help="$("$qbin" -chardev help 2>&1 || true)"
+    disp_help="$("$qbin" -M none -display help 2>&1 || true)"
+    dev_help="$("$qbin" -M "$mach" -device help 2>&1 || true)"
+    chr_help="$("$qbin" -M none -chardev help 2>&1 || true)"
     grep -qw "egl-headless" <<< "$disp_help" || { echo "ERROR: egl-headless missing from -display help: $disp_help" >&2; exit 1; }
     grep -Fq "name \"virtio-gpu-gl-pci\"" <<< "$dev_help" || { echo "ERROR: virtio-gpu-gl-pci missing from -device help" >&2; exit 1; }
     grep -qw "qemu-vdagent" <<< "$chr_help" || { echo "ERROR: qemu-vdagent missing from -chardev help: $chr_help" >&2; exit 1; }
-    grep -qw "spicevmc" <<< "$chr_help" || { echo "ERROR: spicevmc missing from -chardev help: $chr_help" >&2; exit 1; }
+    test -s /usr/lib/aarch64-linux-gnu/qemu/chardev-spice.so || { echo "ERROR: chardev-spice.so missing" >&2; exit 1; }
+    test -s /usr/lib/aarch64-linux-gnu/qemu/ui-spice-core.so || { echo "ERROR: ui-spice-core.so missing" >&2; exit 1; }
+    test -s /usr/lib/aarch64-linux-gnu/qemu/ui-egl-headless.so || { echo "ERROR: ui-egl-headless.so missing" >&2; exit 1; }
   fi
 
   # Live QMP query-chardev assertion for vdagent

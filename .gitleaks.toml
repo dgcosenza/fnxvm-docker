@@ -1,0 +1,13 @@
+title = "FNXVM Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public Microsoft generic non-activating trial keys from upstream dockur/windows src/sif.sh"
+paths = [
+  '''^src/windows/common/sif\.sh$''',
+]
+regexes = [
+  '''(DR8GV-C8V6J-BYXHG-7PYJR-DB66Y|B2RBK-7KPT9-4JP6X-QQFWM-PJD6G|QKDCQ-TP2JM-G4MDG-VR6F2-P9C48|P4WJG-WK3W7-3HM8W-RWHCK-8JTRY)''',
+]

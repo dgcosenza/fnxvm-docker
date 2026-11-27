@@ -839,6 +839,7 @@ FNXVM_SIG_URL=""
 FNXVM_GPG_KEYRING=""
 FNXVM_ISO_FILENAME=""
 FNXVM_RESOLVED_NAME=""
+FNXVM_MIRROR_URLS=()
 
 if [ -z "$BOOT" ] && [ -n "${FNXVM_OS:-}" ]; then
   folder="${FNXVM_OS,,}"
@@ -871,6 +872,7 @@ if [ -z "$BOOT" ] && [ -n "${FNXVM_OS:-}" ]; then
   FNXVM_SIG_URL=$(jq -r '.signature_url // ""' <<< "$resolved_json")
   FNXVM_GPG_KEYRING=$(jq -r '.gpg_keyring // ""' <<< "$resolved_json")
   FNXVM_ISO_FILENAME=$(jq -r '.iso_filename // ""' <<< "$resolved_json")
+  mapfile -t FNXVM_MIRROR_URLS < <(jq -r '.mirrors[]? // empty' <<< "$resolved_json")
   info "Resolved ${FNXVM_RESOLVED_NAME}: ${BOOT}"
 fi
 
@@ -957,16 +959,40 @@ find "$STORAGE" -maxdepth 1 -type f -iname 'qemu.*' -delete
 
 base=$(getBase "$BOOT")
 
-downloadRetry \
-  "$STORAGE/$base" \
-  "$CONNECTIONS" \
-  "5" \
-  "${download_name:-$base}" \
-  "100000" \
-  "$BOOT" \
-  "$base" \
-  "$download_name" \
-  "0" || exit 60
+download_ok="N"
+if downloadRetry \
+    "$STORAGE/$base" \
+    "$CONNECTIONS" \
+    "5" \
+    "${download_name:-$base}" \
+    "100000" \
+    "$BOOT" \
+    "$base" \
+    "$download_name" \
+    "0"; then
+  download_ok="Y"
+elif (( ${#FNXVM_MIRROR_URLS[@]} > 0 )); then
+  for mirror_url in "${FNXVM_MIRROR_URLS[@]}"; do
+    [ -z "$mirror_url" ] && continue
+    [[ "$mirror_url" == "$BOOT" ]] && continue
+    warn "Primary download failed; trying official fallback mirror: ${mirror_url}"
+    if downloadRetry \
+        "$STORAGE/$base" \
+        "$CONNECTIONS" \
+        "5" \
+        "${download_name:-$base}" \
+        "100000" \
+        "$mirror_url" \
+        "$base" \
+        "$download_name" \
+        "0"; then
+      download_ok="Y"
+      break
+    fi
+  done
+fi
+
+[ "$download_ok" = "Y" ] || exit 60
 
 if [ -n "$FNXVM_VERIFY_METHOD" ]; then
   verifyFnxvmDownload "$STORAGE/$base" || exit 61

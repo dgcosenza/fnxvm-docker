@@ -7,6 +7,20 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
 
 <!-- changelog:auto -->
 
+## [6.06.5] — 2026-11-27
+
+### Fixed
+- **Debian multi-connection `"Too many redirects"` mirror resilience (`src/common/download.sh`, `src/fnxvm-resolve`, `src/generic/install.sh`):**
+  - **Root cause:** `cdimage.debian.org` (backed by the ACC Umeå redirector cluster) returns HTTP `302` redirects to backend mirror nodes that can cross-redirect under parallel-connection load, while `aria2` never resets `Request::redirectCount_` on HTTP `200`/`206` responses and aborts fatally with `errorCode=23 Too many redirects: count=20`.
+  - Pre-resolve HTTP redirect chains once up front (`resolveDownloadUrl` via `curl` `HEAD`, falling back to `Range: bytes=0-0` with `--max-filesize` guard) before invoking `aria2c` so all parallel connections download directly from the resolved mirror with 0 redirect hops; add `--min-split-size=20M` and automatic single-connection downgrade when a mirror advertises `Accept-Ranges: none`.
+  - Fail fast (`rc=23`) on hard redirect loops instead of repeating the broken URL, and wire automatic official mirror fallback in `src/generic/install.sh` (`FNXVM_MIRROR_URLS` populated from `fnxvm-resolve` for `debian` and `haiku`). Checksum manifests (`SHA256SUMS` + `SHA256SUMS.sign`) are still always fetched from canonical `cdimage.debian.org` and verified fail-closed with `gpgv` + SHA-256.
+- **Standalone `init.sh` default (`src/common/init.sh`):** Default `SUPPORT` inside `init.sh` so sourcing it outside `entry.sh` cannot trigger `SUPPORT: unbound variable`.
+
+### Added
+- **Automated redirect & mirror fallback tests (`tests/test_download_redirects.py`, invoked by `tests/smoke.sh` on both `amd64` and `arm64`):** Exercises 302 pre-resolution (asserting exactly 1 redirector hit under `CONNECTIONS=4`), looping 302 fail-fast (`rc=23`) with automatic mirror fallback recovery, `Accept-Ranges: none` single-connection downgrade, Debian resolver fallback mirrors, and `init.sh` `SUPPORT` default.
+
+---
+
 ## [6.06.4] — 2026-11-27
 
 ### Fixed

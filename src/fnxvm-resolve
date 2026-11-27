@@ -122,6 +122,15 @@ def parse_version_tuple(ver: str) -> tuple[int, ...]:
     return tuple(int(p) for p in re.findall(r"[0-9]+", ver))
 
 
+DEBIAN_CD_MIRRORS = (
+    "https://ftp.fau.de/debian-cd",
+    "https://mirrors.ocf.berkeley.edu/debian-cd",
+    "https://mirror.csclub.uwaterloo.ca/debian-cd",
+    "https://mirror.steadfastnet.com/debian-cd",
+    "https://ftp.riken.jp/Linux/debian/debian-cd",
+)
+
+
 def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
     desk = (desktop or "gnome").strip().lower()
     if desk not in VALID_DESKTOPS:
@@ -130,7 +139,8 @@ def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
         )
 
     if arch == "amd64":
-        base = "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid"
+        rel_dir = "current-live/amd64/iso-hybrid"
+        base = f"https://cdimage.debian.org/debian-cd/{rel_dir}"
         sums_url = f"{base}/SHA256SUMS"
         sig_url = f"{base}/SHA256SUMS.sign"
         body, _ = http_get_text(sums_url)
@@ -144,6 +154,7 @@ def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
                 f"Could not locate Debian live {desk} amd64 ISO in {sums_url}."
             )
         sha256, filename, version = m.group(1), m.group(2), m.group(3)
+        mirrors = [f"{mirror}/{rel_dir}/{filename}" for mirror in DEBIAN_CD_MIRRORS]
         return {
             "os": "debian",
             "guest": f"Debian Desktop ({desk.upper()} live)",
@@ -153,6 +164,7 @@ def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
             "version_policy": "latest stable live ISO",
             "iso_url": f"{base}/{filename}",
             "iso_filename": filename,
+            "mirrors": mirrors,
             "checksum_url": sums_url,
             "checksum_algorithm": "sha256",
             "checksum_value": sha256,
@@ -163,7 +175,8 @@ def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
         }
 
     # arm64: Debian does not publish official current-live/arm64 ISOs; use official DVD-1 installer
-    base = "https://cdimage.debian.org/debian-cd/current/arm64/iso-dvd"
+    rel_dir = "current/arm64/iso-dvd"
+    base = f"https://cdimage.debian.org/debian-cd/{rel_dir}"
     sums_url = f"{base}/SHA256SUMS"
     sig_url = f"{base}/SHA256SUMS.sign"
     body, _ = http_get_text(sums_url)
@@ -175,6 +188,7 @@ def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
     if not m:
         raise ResolveError(f"Could not locate Debian arm64 DVD-1 ISO in {sums_url}.")
     sha256, filename, version = m.group(1), m.group(2), m.group(3)
+    mirrors = [f"{mirror}/{rel_dir}/{filename}" for mirror in DEBIAN_CD_MIRRORS]
     return {
         "os": "debian",
         "guest": f"Debian ({desk.upper()} via arm64 DVD-1 installer)",
@@ -184,6 +198,7 @@ def resolve_debian(arch: str, desktop: str) -> dict[str, Any]:
         "version_policy": "latest stable installer ISO (Debian publishes no official arm64 live ISO)",
         "iso_url": f"{base}/{filename}",
         "iso_filename": filename,
+        "mirrors": mirrors,
         "checksum_url": sums_url,
         "checksum_algorithm": "sha256",
         "checksum_value": sha256,

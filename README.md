@@ -10,7 +10,7 @@
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17182/badge)](https://www.bestpractices.dev/projects/17182)
 [![Hub pulls](https://img.shields.io/docker/pulls/dgcosenza/fnxvm.svg)](https://hub.docker.com/r/dgcosenza/fnxvm)
 [![Image size](https://img.shields.io/docker/image-size/dgcosenza/fnxvm/latest.svg)](https://hub.docker.com/r/dgcosenza/fnxvm/tags)
-[![Version](https://img.shields.io/badge/version-6.06.4-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-6.06.5-blue.svg)](CHANGELOG.md)
 
 Maintainer: Daniel G. Cosenza from FNX Labs
 
@@ -238,8 +238,9 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`)
 
 ## Upgrade / migration
 
-- **From `6.06.3` to `6.06.4`:** Drop-in hotfix restoring complete official Debian CD signing keys (with UIDs/subkeys), cleaned Ubuntu CD key, and live CI `gpgv`/checksum verification.
-- **From `6.06.2` / earlier:** Universal noVNC clipboard is active (`WEB_TLS=Y`, `RDP=Y`); auth is ON by default (`WEB_AUTH=Y`, `WEB_USER`, `WEB_PASSWORD_FILE`, `VNC_PASSWORD_FILE`); `/storage` stays drop-in compatible.
+- **From `6.06.4` to `6.06.5`:** Drop-in fix pre-resolving HTTP redirects once before multi-connection `aria2c` downloads, adding automatic official Debian CD mirror fallback (verified against canonical `cdimage.debian.org` GPG-signed `SHA256SUMS`), and defaulting `SUPPORT` in `init.sh`.
+- **From `6.06.3` to `6.06.4`:** Complete Debian CD signing keys, cleaned Ubuntu key, and live CI `gpgv`/checksum checks.
+- **From `6.06.2` / earlier:** Universal noVNC clipboard (`WEB_TLS=Y`, `RDP=Y`), default auth (`WEB_AUTH=Y`, `WEB_USER`, `WEB_PASSWORD_FILE`, `VNC_PASSWORD_FILE`), drop-in `/storage`.
 
 ## Security
 

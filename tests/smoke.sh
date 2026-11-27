@@ -741,6 +741,9 @@ fi
 # Omarchy) + Daemonarchy/FreeBSD/Haiku checksum-file verification INSIDE the image.
 docker run --rm -i "${GH_ENV_ARGS[@]}" --entrypoint python3 "$IMAGE" - < "${SCRIPT_DIR}/test_verify_keyrings.py"
 
+# Execute redirect pre-resolution, mirror fallback, and non-Range downgrade tests INSIDE the image.
+docker run --rm -i --entrypoint python3 "$IMAGE" - < "${SCRIPT_DIR}/test_download_redirects.py"
+
 # ==============================================================================
 # 7. Full dynamic OS resolver + HTTP 200 verification for all 7 supported guests
 # ==============================================================================

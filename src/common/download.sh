@@ -503,6 +503,99 @@ handleDownloadCancellation() {
   esac
 }
 
+resolveDownloadUrl() {
+
+  local url="$1"
+  local agent="$2"
+  local resolved_var="$3"
+  local ranges_var="$4"
+
+  case "${url,,}" in
+    http://* | https://* ) ;;
+    * ) return 1 ;;
+  esac
+
+  command -v curl >/dev/null || return 1
+
+  local hdr_file meta code eff_url rc=0
+  hdr_file=$(mktemp -p "${QEMU_DIR:-/tmp}" .probe-hdr.XXXXXX 2>/dev/null) || return 1
+
+  # Resolve redirect chains once up front so multi-connection aria2c talks
+  # directly to the final mirror instead of hammering a redirector N times
+  # and tripping aria2's cumulative MAX_REDIRECT=20 limit across mirrors.
+  meta=$(LC_ALL=C curl \
+    --silent \
+    --show-error \
+    --location \
+    --max-redirs 10 \
+    --connect-timeout 15 \
+    --max-time 30 \
+    --head \
+    --user-agent "$agent" \
+    --dump-header "$hdr_file" \
+    --output /dev/null \
+    --write-out '%{http_code}\t%{url_effective}' \
+    -- "$url" 2>/dev/null) || rc=$?
+
+  if (( rc == 47 )); then
+    rm -f -- "$hdr_file"
+    return 23
+  fi
+
+  IFS=$'\t' read -r code eff_url <<< "$meta"
+
+  # Fall back to a 1-byte Range GET only when HEAD failed/was rejected or
+  # returned 200 without any Accept-Ranges header (explicit Accept-Ranges: none
+  # already confirms single-connection mode without needing a second request).
+  if (( rc != 0 )) || [[ "$code" == "403" || "$code" == "405" || "$code" == "501" ]] ||
+      { [[ "$code" == "200" ]] && ! grep -qi '^accept-ranges:' "$hdr_file"; }; then
+    : > "$hdr_file"
+    rc=0
+    meta=$(LC_ALL=C curl \
+      --silent \
+      --show-error \
+      --location \
+      --max-redirs 10 \
+      --connect-timeout 15 \
+      --max-time 30 \
+      --max-filesize 65536 \
+      --range 0-0 \
+      --user-agent "$agent" \
+      --dump-header "$hdr_file" \
+      --output /dev/null \
+      --write-out '%{http_code}\t%{url_effective}' \
+      -- "$url" 2>/dev/null) || rc=$?
+
+    if (( rc == 47 )); then
+      rm -f -- "$hdr_file"
+      return 23
+    fi
+
+    IFS=$'\t' read -r code eff_url <<< "$meta"
+    # Exit 63 (CURLE_FILESIZE_EXCEEDED) means the server ignored Range: 0-0
+    # and attempted to send the full file with HTTP 200; treat as non-range.
+    if (( rc == 63 )) && [[ "$code" == "200" ]]; then
+      rc=0
+    fi
+  fi
+
+  local ranges="N"
+  if [[ "$code" == "206" ]] || grep -qi '^accept-ranges:[[:space:]]*bytes' "$hdr_file"; then
+    ranges="Y"
+  fi
+
+  rm -f -- "$hdr_file"
+
+  if (( rc == 0 )) && [[ "$code" == "200" || "$code" == "206" ]] &&
+      [[ "${eff_url,,}" == http://* || "${eff_url,,}" == https://* ]]; then
+    printf -v "$resolved_var" '%s' "$eff_url"
+    printf -v "$ranges_var" '%s' "$ranges"
+    return 0
+  fi
+
+  return 1
+}
+
 downloadToFile() {
 
   if (( $# < 3 )); then
@@ -572,12 +665,27 @@ downloadToFile() {
 
   # Allow callers such as macOS recovery to provide a protocol-specific
   # user agent while applying the normal browser agent everywhere else.
-  for option in "${request[@]}"; do
+  local probe_agent=""
+  local idx=0
+  while (( idx < ${#request[@]} )); do
+    option="${request[$idx]}"
     case "$option" in
-      --user-agent | --user-agent=* | -U | -U* )
+      --user-agent | -U )
         custom_agent="Y"
+        if (( idx + 1 < ${#request[@]} )); then
+          probe_agent="${request[$((idx + 1))]}"
+        fi
+        break ;;
+      --user-agent=* )
+        custom_agent="Y"
+        probe_agent="${option#--user-agent=}"
+        break ;;
+      -U* )
+        custom_agent="Y"
+        probe_agent="${option#-U}"
         break ;;
     esac
+    idx=$((idx + 1))
   done
 
   if [[ "$custom_agent" != "Y" ]]; then
@@ -586,7 +694,31 @@ downloadToFile() {
       return 2
     fi
 
+    probe_agent="$agent"
     request=( --user-agent "$agent" "${request[@]}" )
+  fi
+
+  local effective_url="$url"
+
+  if (( connections > 1 )) && command -v curl >/dev/null; then
+    local resolved_url="" supports_ranges="Y" probe_rc=0
+    resolveDownloadUrl "$url" "$probe_agent" resolved_url supports_ranges || probe_rc=$?
+
+    if (( probe_rc == 23 )); then
+      local failure="Failed to download $url : Too many redirects."
+      html "$failure"
+      error "$failure"
+      return 23
+    elif (( probe_rc == 0 )) && [ -n "$resolved_url" ]; then
+      effective_url="$resolved_url"
+      if [[ "$effective_url" != "$url" ]] && enabled "${DEBUG:-N}"; then
+        echo "Resolved redirect: $url -> $effective_url"
+      fi
+      if [[ "$supports_ranges" != "Y" ]]; then
+        enabled "${DEBUG:-N}" && echo "Mirror does not advertise byte ranges; falling back to single connection for $effective_url"
+        connections=1
+      fi
+    fi
   fi
 
   if (( connections > 1 )); then
@@ -642,7 +774,7 @@ downloadToFile() {
       return "$rc"
     }
 
-  enabled "${DEBUG:-N}" && echo "Downloading: $url"
+  enabled "${DEBUG:-N}" && echo "Downloading: $effective_url"
 
   if (( connections > 1 )); then
 
@@ -660,6 +792,8 @@ downloadToFile() {
       --out="$file" \
       --split="$connections" \
       --max-connection-per-server="$connections" \
+      --min-split-size=20M \
+      --reuse-uri=true \
       --file-allocation="$allocation" \
       --continue="$aria_resume" \
       --always-resume=false \
@@ -684,7 +818,7 @@ downloadToFile() {
       --log="$log" \
       --log-level=error \
       "${request[@]}" \
-      -- "$url" || run_rc=$?
+      -- "$effective_url" || run_rc=$?
 
   else
 
@@ -698,7 +832,7 @@ downloadToFile() {
         "${progress[@]}" \
         --output-file="$log" \
         "${request[@]}" \
-        -- "$url"
+        -- "$effective_url"
 
       rc=$?
     } || :
@@ -863,6 +997,13 @@ downloadRetry() {
   else
 
     local rc=$?
+    # Exit 23 from the pre-resolution redirect probe indicates a hard redirect
+    # loop even on a single probe; skip retrying the same looping URL so mirror
+    # fallback can switch immediately.
+    if (( rc == 23 )); then
+      rm -f -- "$dest" "$dest.aria2" || :
+      return 23
+    fi
 
   fi
 

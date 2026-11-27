@@ -196,12 +196,14 @@ configureClipboard() {
   local bus
   bus=$(getPciBus)
   local qbin="${QEMU_BIN:-qemu-system-x86_64}"
+  local chardev_help
+  chardev_help="$("$qbin" -chardev help 2>&1 || true)"
 
   if [ "${FNXVM_SPICE_ACTIVE:-N}" = "Y" ]; then
     CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
     CLIP_OPTS+=" -chardev spicevmc,id=vdagent,name=vdagent"
     CLIP_OPTS+=" -device virtserialport,bus=virtio-serial-clip.0,chardev=vdagent,id=spicechannel0,name=com.redhat.spice.0"
-  elif "$qbin" -chardev help 2>/dev/null | grep -qw "qemu-vdagent"; then
+  elif grep -qw "qemu-vdagent" <<< "$chardev_help"; then
     CLIP_OPTS="-device virtio-serial-pci,id=virtio-serial-clip,bus=${bus}"
     CLIP_OPTS+=" -chardev qemu-vdagent,id=vdagent,name=vdagent,clipboard=on"
     CLIP_OPTS+=" -device virtserialport,bus=virtio-serial-clip.0,chardev=vdagent,id=spicechannel0,name=com.redhat.spice.0"

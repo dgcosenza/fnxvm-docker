@@ -260,32 +260,41 @@ docker exec "$C1" bash -ceu '
   cmdline="$(tr "\0" " " < "/proc/${qpid}/cmdline")"
 
   # Clipboard & VNC auth args
-  echo "$cmdline" | grep -q "virtio-serial-pci"
-  echo "$cmdline" | grep -q "qemu-vdagent"
-  echo "$cmdline" | grep -q "clipboard=on"
-  echo "$cmdline" | grep -q "com.redhat.spice.0"
-  echo "$cmdline" | grep -q "password=on"
+  for needle in "virtio-serial-pci" "qemu-vdagent" "clipboard=on" "com.redhat.spice.0" "password=on"; do
+    if ! grep -Fq -- "$needle" <<< "$cmdline"; then
+      echo "ERROR: expected ${needle} in QEMU cmdline: ${cmdline}" >&2
+      exit 1
+    fi
+  done
 
   # Safe default GPU device (GPU unset / auto without /dev/dri) + OpenGL/SPICE module availability
   if [ "$(dpkg --print-architecture)" = "amd64" ]; then
-    command -v qemu-system-x86_64 >/dev/null
+    qbin="qemu-system-x86_64"
+    command -v "$qbin" >/dev/null
     test -s /usr/share/OVMF/OVMF_CODE_4M.fd
     test -s /usr/share/OVMF/OVMF_VARS_4M.fd
-    echo "$cmdline" | grep -q -- "-device VGA"
-    qemu-system-x86_64 -display help | grep -qx "egl-headless"
-    qemu-system-x86_64 -device help | grep -Fq "name \"virtio-vga-gl\""
-    qemu-system-x86_64 -device help | grep -Fq "name \"qxl-vga\""
-    qemu-system-x86_64 -chardev help | grep -qw "qemu-vdagent"
-    qemu-system-x86_64 -chardev help | grep -qw "spicevmc"
+    grep -Fq -- "-device VGA" <<< "$cmdline" || { echo "ERROR: expected -device VGA in cmdline: $cmdline" >&2; exit 1; }
+    disp_help="$("$qbin" -display help 2>&1 || true)"
+    dev_help="$("$qbin" -device help 2>&1 || true)"
+    chr_help="$("$qbin" -chardev help 2>&1 || true)"
+    grep -qw "egl-headless" <<< "$disp_help" || { echo "ERROR: egl-headless missing from -display help: $disp_help" >&2; exit 1; }
+    grep -Fq "name \"virtio-vga-gl\"" <<< "$dev_help" || { echo "ERROR: virtio-vga-gl missing from -device help" >&2; exit 1; }
+    grep -Fq "name \"qxl-vga\"" <<< "$dev_help" || { echo "ERROR: qxl-vga missing from -device help" >&2; exit 1; }
+    grep -qw "qemu-vdagent" <<< "$chr_help" || { echo "ERROR: qemu-vdagent missing from -chardev help: $chr_help" >&2; exit 1; }
+    grep -qw "spicevmc" <<< "$chr_help" || { echo "ERROR: spicevmc missing from -chardev help: $chr_help" >&2; exit 1; }
   else
-    command -v qemu-system-aarch64 >/dev/null
+    qbin="qemu-system-aarch64"
+    command -v "$qbin" >/dev/null
     test -s /usr/share/AAVMF/AAVMF_CODE.no-secboot.fd
     test -s /usr/share/AAVMF/AAVMF_VARS.fd
-    echo "$cmdline" | grep -q -- "-device ramfb"
-    qemu-system-aarch64 -display help | grep -qx "egl-headless"
-    qemu-system-aarch64 -device help | grep -Fq "name \"virtio-gpu-gl-pci\""
-    qemu-system-aarch64 -chardev help | grep -qw "qemu-vdagent"
-    qemu-system-aarch64 -chardev help | grep -qw "spicevmc"
+    grep -Fq -- "-device ramfb" <<< "$cmdline" || { echo "ERROR: expected -device ramfb in cmdline: $cmdline" >&2; exit 1; }
+    disp_help="$("$qbin" -display help 2>&1 || true)"
+    dev_help="$("$qbin" -device help 2>&1 || true)"
+    chr_help="$("$qbin" -chardev help 2>&1 || true)"
+    grep -qw "egl-headless" <<< "$disp_help" || { echo "ERROR: egl-headless missing from -display help: $disp_help" >&2; exit 1; }
+    grep -Fq "name \"virtio-gpu-gl-pci\"" <<< "$dev_help" || { echo "ERROR: virtio-gpu-gl-pci missing from -device help" >&2; exit 1; }
+    grep -qw "qemu-vdagent" <<< "$chr_help" || { echo "ERROR: qemu-vdagent missing from -chardev help: $chr_help" >&2; exit 1; }
+    grep -qw "spicevmc" <<< "$chr_help" || { echo "ERROR: spicevmc missing from -chardev help: $chr_help" >&2; exit 1; }
   fi
 
   # Live QMP query-chardev assertion for vdagent

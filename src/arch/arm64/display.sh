@@ -31,11 +31,15 @@ FNXVM_VNC_ACTIVE="N"
 FNXVM_SPICE_ACTIVE="N"
 
 qemuHasDevice() {
-  "$QEMU_BIN" -device help 2>/dev/null | grep -Fq "name \"$1\""
+  local out
+  out="$("$QEMU_BIN" -device help 2>&1 || true)"
+  grep -Fq "name \"$1\"" <<< "$out"
 }
 
 qemuHasDisplay() {
-  "$QEMU_BIN" -display help 2>/dev/null | grep -qx "$1"
+  local out
+  out="$("$QEMU_BIN" -display help 2>&1 || true)"
+  grep -qw "$1" <<< "$out"
 }
 
 # Normalize GPU mode

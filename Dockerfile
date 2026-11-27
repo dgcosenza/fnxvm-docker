@@ -6,8 +6,8 @@
 
 ARG GO_BASE=golang:1.27.4-trixie@sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee
 ARG DEBIAN_BASE=debian:13.8-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
-ARG FNXVM_VERSION=6.06.3
-ARG FNXVM_RELEASE=3
+ARG FNXVM_VERSION=6.06.4
+ARG FNXVM_RELEASE=4
 ARG WINDOWS_VERSION=6.06
 ARG QEMU_VERSION=7.50
 ARG WEBSOCKETD_VERSION=0.4.2
@@ -129,10 +129,20 @@ RUN set -eu \
     # 3. Install pure-Python qemu.qmp into isolated target (no pip in runtime image)
     && python3 -m pip install --no-cache-dir --break-system-packages --root-user-action=ignore \
          --target /out/python "qemu.qmp==${QMP_VERSION}" \
-    # 4. Dearmor vendor GPG public keys for offline gpgv verification
+    # 4. Dearmor vendor GPG public keys for offline gpgv verification and assert
+    #    every keyring imports cleanly with at least one public key and user ID
     && for asc in /build/keys/*.asc; do \
          base="$(basename "$asc" .asc)"; \
          gpg --batch --dearmor -o "/out/keys/${base}.gpg" "$asc"; \
+         gnupg_tmp="$(mktemp -d)"; \
+         chmod 700 "$gnupg_tmp"; \
+         GNUPGHOME="$gnupg_tmp" gpg --batch --import "/out/keys/${base}.gpg"; \
+         key_info="$(GNUPGHOME="$gnupg_tmp" gpg --batch --list-keys --with-colons --with-fingerprint)"; \
+         rm -rf "$gnupg_tmp"; \
+         printf '%s\n' "$key_info" | grep -q '^pub:' \
+           && printf '%s\n' "$key_info" | grep -q '^uid:' \
+           && printf '%s\n' "$key_info" | grep -q '^fpr:' \
+           || { echo "ERROR: keyring ${base}.gpg is missing a valid public key or user ID!" >&2; exit 1; }; \
        done \
     # 5. Download & verify arch-specific VirtIO Windows drivers
     && if [ "${TARGETARCH}" = "amd64" ]; then \

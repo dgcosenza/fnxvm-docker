@@ -7,6 +7,24 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
 
 <!-- changelog:auto -->
 
+## [6.06.4] — 2026-11-27
+
+### Fixed
+- **Debian CD GPG keyring (`keys/debian-cd.asc` -> `/etc/fnxvm/keys/debian-cd.gpg`):** Replaced the previously UID-less key export (which caused `gpgv` to fail with `No public key` and prevented `OS=debian` from booting) with all three complete official Debian CD signing keys from `hkps://keyring.debian.org` matching [debian.org/CD/verify](https://www.debian.org/CD/verify) (`10460DAD76165AD81FBC0CE9988021A964E6EA7D`, `DF9B9C49EAA9298432589D76DA87E80D6294BE9B`, `F41D30342F3546695F65C66942468F4009EA8AC3`, with full user IDs, self-signatures, and subkeys).
+- **Ubuntu CD GPG keyring (`keys/ubuntu-cd.asc`):** Refreshed cleanly (`--export-options export-clean`) from `hkps://keyserver.ubuntu.com` (`843938DF228D22F7B3742BC0D94AA3F0EFE21092`, shrinking from 65 KB of third-party keyserver noise to 1.7 KB) and verified against official Ubuntu docs; confirmed `keys/omarchy.asc` (`40DFB630FF42BCFFB047046CF0134EE680CAC571`) matches `keys.openpgp.org` and `omacom/omarchy` verbatim.
+- **Fail-closed cleanup & diagnostics (`src/generic/install.sh`):** Log `gpgv` stderr on signature verification failure and delete the unverified downloaded ISO on every failure path in `verifyFnxvmDownload`.
+
+### Added
+- **Build-time keyring validation (`Dockerfile`):** After dearmoring `keys/*.asc`, `asset-builder` imports each `.gpg` keyring with `gpg --batch --import` and asserts `pub:`, `uid:`, and `fpr:` packets exist, making UID-less keyrings impossible to build.
+- **Automated live keyring, signature, and checksum verification (`tests/test_verify_keyrings.py`, invoked by `tests/smoke.sh` on both `amd64` and `arm64`):**
+  - Verifies every bundled `/etc/fnxvm/keys/*.gpg` keyring contains pinned fingerprints, User IDs, and UID self-signatures (cross-checked with host `gpg --import`).
+  - Downloads live Debian `SHA256SUMS` + `SHA256SUMS.sign` (`amd64` live GNOME/KDE and `arm64` DVD-1) and Ubuntu `SHA256SUMS` + `SHA256SUMS.gpg` (`amd64` and `arm64`) inside the built container and verifies them with `gpgv --keyring /etc/fnxvm/keys/...` plus negative tampered-file rejection tests.
+  - Verifies Omarchy `.iso.sha256`, `.iso.sig` issuer fingerprint (`amd64` + `arm64`), and live `gpgv` verification against Omarchy's small official signed `omarchy-keyring` package (`pkgs.omarchy.org`), plus negative tampered-file rejection (full multi-GB ISO `.iso.sig` check runs at runtime).
+  - Exercises live small checksum-file fetches and parsing for Daemonarchy (`amd64` + `arm64`), FreeBSD (`amd64` + `arm64`), and Haiku (`amd64`, including `.minisig`).
+- Documented pinned vendor OpenPGP key fingerprints and official verification sources in `README.md` (`Security`) and `THIRD-PARTY-NOTICES.md`.
+
+---
+
 ## [6.06.3] — 2026-11-27
 
 ### Added

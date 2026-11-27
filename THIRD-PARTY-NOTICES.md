@@ -28,6 +28,18 @@ FNXVM reuses and adapts scripts and assets from the following upstream open-sour
 - **VirtIO Windows Drivers** (`qemus/virtiso-whql` and `qemus/virtiso-arm`, derived from Fedora `virtio-win`) — BSD-3-Clause License.
 - **Debian 13 (trixie) packages** — QEMU, `qemu-system-modules-opengl`, and `qemu-system-modules-spice` (`GPL-2.0-or-later`), Mesa `libegl-mesa0` (`MIT`), OVMF / AAVMF EDK2 (`BSD-2-Clause-Patent`), SeaBIOS (`LGPL-3.0-or-later`), Passt (`GPL-2.0-or-later` / `BSD-3-Clause`), swtpm (`BSD-3-Clause`), nginx (`BSD-2-Clause`), `apache2-utils` (`Apache-2.0`), Samba (`GPL-3.0-or-later`), wimtools (`GPL-3.0-or-later` / `LGPL-3.0-or-later`), aria2 (`GPL-2.0-or-later`), tini (`MIT`), and supporting utilities. Full Debian package copyrights are located in `/usr/share/doc/*/copyright` inside the image.
 
+## Bundled Vendor OpenPGP Public Keys
+
+FNXVM bundles only official vendor public signing keys (dearmored into `/etc/fnxvm/keys/*.gpg`) for offline fail-closed `gpgv` verification of downloaded guest checksum manifests and ISOs:
+
+| Keyring | Primary Key Fingerprint | User ID | Official Source |
+| --- | --- | --- | --- |
+| `keys/debian-cd.asc` | `1046 0DAD 7616 5AD8 1FBC 0CE9 9880 21A9 64E6 EA7D` | `Debian CD signing key <debian-cd@lists.debian.org>` | `hkps://keyring.debian.org` / https://www.debian.org/CD/verify |
+| `keys/debian-cd.asc` | `DF9B 9C49 EAA9 2984 3258 9D76 DA87 E80D 6294 BE9B` | `Debian CD signing key <debian-cd@lists.debian.org>` | `hkps://keyring.debian.org` / https://www.debian.org/CD/verify |
+| `keys/debian-cd.asc` | `F41D 3034 2F35 4669 5F65 C669 4246 8F40 09EA 8AC3` | `Debian Testing CDs Automatic Signing Key <debian-cd@lists.debian.org>` | `hkps://keyring.debian.org` / https://www.debian.org/CD/verify |
+| `keys/ubuntu-cd.asc` | `8439 38DF 228D 22F7 B374 2BC0 D94A A3F0 EFE2 1092` | `Ubuntu CD Image Automatic Signing Key (2012) <cdimage@ubuntu.com>` | `hkps://keyserver.ubuntu.com` / https://ubuntu.com/tutorials/how-to-verify-ubuntu |
+| `keys/omarchy.asc` | `40DF B630 FF42 BCFF B047 046C F013 4EE6 80CA C571` | `Omarchy <pkgs@omarchy.org>` | https://keys.openpgp.org (`pkgs@omarchy.org`) / https://github.com/omacom/omarchy (`manual/48-security.md`) |
+
 ## Upstream MIT License Text (dockur/windows & qemus/qemu)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

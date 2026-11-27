@@ -196,8 +196,8 @@ Probes nginx's internal Unix socket (`/run/shm/nginx-health.sock` -> `/healthz`)
 | Architectures | `linux/amd64, linux/arm64` |
 | Uncompressed size (per arch) | `amd64: 248.2 MB, arm64: 1120.1 MB` |
 | Last verified build (UTC) | `2026-11-27` |
-| Published multi-arch digest | `dgcosenza/fnxvm@sha256:2391cf506443d7b48a694e3bd5b970bf3dc450f9752a23fb195918662759f14b` |
-| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:2391cf506443d7b48a694e3bd5b970bf3dc450f9752a23fb195918662759f14b` |
+| Published multi-arch digest | `dgcosenza/fnxvm@sha256:83ce673973338a216196384be1b54615b3a79230657a0f5b7e0edea0b2c55490` |
+| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:83ce673973338a216196384be1b54615b3a79230657a0f5b7e0edea0b2c55490` |
 | Supply chain | Cosign OIDC signed + SPDX & CycloneDX SBOM attestations + SLSA Build L3 provenance |
 | Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (76 upstream-unfixed) |
 

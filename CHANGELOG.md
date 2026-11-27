@@ -87,8 +87,8 @@ Maintained by **Daniel G. Cosenza from FNX Labs**.
   - **Base image:** `debian:13.8-slim` pinned at `sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0`
   - **Go builder:** `golang:1.27.4-trixie` pinned at `sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee`
   - `windows`: `Windows 11 (win11x64, build 26100.4349)`
-- Vulnerability gate: **0 fixable findings of any severity** in Trivy and Grype (SBOM scan) (76 upstream-unfixed C/H).
-- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:2391cf506443d7b48a694e3bd5b970bf3dc450f9752a23fb195918662759f14b` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
+- Vulnerability gate: **0 fixable findings of any severity** in Trivy and Grype (SBOM scan) (76 upstream-unfixed).
+- Published multi-arch digest (Docker Hub + GHCR): `dgcosenza/fnxvm@sha256:83ce673973338a216196384be1b54615b3a79230657a0f5b7e0edea0b2c55490` (Cosign OIDC signed + SPDX/CycloneDX SBOM + SLSA L3 provenance).
 ---
 
 ---

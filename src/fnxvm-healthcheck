@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# FNXVM container healthcheck.
+# Verifies that the web viewer (nginx + websocketd) or VNC server (when WEB=N)
+# is actively serving, and that QEMU stays alive once booted.
+# Maintainer: Daniel G. Cosenza from FNX Labs
+set -euo pipefail
+
+WEB_PORT="${WEB_PORT:-8006}"
+VNC_PORT="${VNC_PORT:-5900}"
+WEB="${WEB:-Y}"
+QEMU_DIR="/run/shm"
+
+# Fail immediately when the container is shutting down.
+if [ -f "${QEMU_DIR}/qemu.end" ]; then
+  echo "FNXVM is shutting down" >&2
+  exit 1
+fi
+
+is_disabled() {
+  case "${1,,}" in
+    n|no|none|false|0|off|disable|disabled) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if is_disabled "$WEB"; then
+  # Headless VNC-only mode: verify VNC TCP port is accepting connections.
+  if ! nc -z -w 3 127.0.0.1 "${VNC_PORT}" >/dev/null 2>&1; then
+    echo "VNC port ${VNC_PORT} is not listening" >&2
+    exit 1
+  fi
+else
+  # Default web-viewer mode: verify nginx responds (200 OK or 401 when auth is enabled)
+  # and the websocketd status socket is active.
+  code="$(curl -sS --max-time 4 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${WEB_PORT}/" || echo "000")"
+  if [ "$code" != "200" ] && [ "$code" != "401" ]; then
+    echo "Web viewer on port ${WEB_PORT} returned HTTP ${code}" >&2
+    exit 1
+  fi
+  if [ ! -S "${QEMU_DIR}/status-ws.sock" ]; then
+    echo "Status websocket socket is missing" >&2
+    exit 1
+  fi
+fi
+
+# If QEMU has published a PID, ensure the hypervisor process is alive.
+if [ -s "${QEMU_DIR}/qemu.pid" ]; then
+  qpid="$(tr -d '[:space:]' < "${QEMU_DIR}/qemu.pid")"
+  if [[ "$qpid" =~ ^[1-9][0-9]*$ ]] && ! kill -0 "$qpid" 2>/dev/null; then
+    echo "QEMU process ${qpid} is not running" >&2
+    exit 1
+  fi
+fi
+
+exit 0

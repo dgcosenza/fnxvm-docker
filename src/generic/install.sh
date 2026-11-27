@@ -1,0 +1,1147 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+getBase() {
+
+  # Derive a safe local filename by dropping the query string, URL-decoding the
+  # basename, and replacing characters unsuitable for a storage path.
+  local base="${1%%\?*}"
+  base=$(basename "$base")
+  printf -v base '%b' "${base//%/\\x}"
+  base="${base//[!A-Za-z0-9._-]/_}"
+
+  echo "$base"
+  return 0
+}
+
+getFolder() {
+
+  local base
+  local result="$1"
+
+  if [[ "$result" != *"."* ]]; then
+
+    result="${result,,}"
+
+  else
+
+    base=$(getBase "$result")
+    result="${base%.*}"
+
+    # Compressed downloads use the underlying image name as their storage folder,
+    # so strip both the archive and image extensions when both are present.
+    case "${base,,}" in
+
+      *".gz" | *".gzip" | *".xz" | *".7z" | *".zip" | *".rar" | *".lzma" | *".bz" | *".bz2" )
+
+        [[ "$result" == *"."* ]] && result="${result%.*}" ;;
+
+    esac
+
+  fi
+
+  [ -z "$result" ] && result="unknown"
+  echo "$result"
+
+  return 0
+}
+
+bootFile() {
+
+  local file="$1"
+  local ext="${file##*.}"
+  local dest="$STORAGE/boot.$ext"
+
+  if [[ "$file" == "$dest" ]]; then
+    BOOT="$file"
+    return 0
+  fi
+
+  # Root-level bind-mounted media must remain in place; downloaded files are
+  # moved to a canonical persistent boot filename instead.
+  if [[ "${file,,}" == "/boot.${ext,,}" || "${file,,}" == "/custom.${ext,,}" ]]; then
+    BOOT="$file"
+    return 0
+  fi
+
+  if ! mv -f "$file" "$dest"; then
+    error "Failed to move $file to $dest !"
+    return 1
+  fi
+
+  BOOT="$dest"
+  return 0
+}
+
+detectRawDiskMode() {
+
+  local file="$1"
+  local result mode
+
+  if [ ! -r "$file" ]; then
+    error "Failed to read disk image \"$file\"!"
+    return 1
+  fi
+
+  if ! result=$(LC_ALL=C sfdisk --json "$file" 2>/dev/null); then
+    warn "No partition table detected in \"$file\", assuming legacy boot."
+    BOOT_MODE="legacy"
+    return 0
+  fi
+
+  if ! mode=$(jq -r '
+      [.partitiontable.partitions[]? |
+        ((.type // "") | ascii_downcase | sub("^0x"; ""))
+      ] as $types |
+
+      if any($types[];
+        . == "ef" or
+        . == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+      ) then
+        "uefi"
+      elif any($types[]; . == "ee") then
+        "protective"
+      else
+        "legacy"
+      end
+    ' <<< "$result"); then
+    error "Failed to parse disk partition table!"
+    return 1
+  fi
+
+  case "$mode" in
+    "uefi" ) ;;
+
+    "protective" )
+      warn "Protective MBR found but no valid GPT partition table was detected in \"$file\", keeping UEFI mode." ;;
+
+    "legacy" )
+      info "No EFI partition detected in \"$file\", using legacy boot."
+      BOOT_MODE="legacy" ;;
+
+    * )
+      error "Failed to determine boot mode from disk partition table!"
+      return 1 ;;
+  esac
+
+  return 0
+}
+
+isLegacyIso() {
+
+  local file="$1"
+  local result
+
+  if ! result=$(LC_ALL=C xorriso \
+      -no_rc \
+      -indev "$file" \
+      -report_el_torito plain \
+      -report_system_area plain 2>/dev/null); then
+    error "Failed to read ISO file, invalid format!"
+    return 2
+  fi
+
+  # Exit 0 means BIOS-only, 1 confirms UEFI support, and 3 means the ISO layout
+  # did not provide enough information to choose safely.
+  awk '
+    $1 == "El" &&
+    $2 == "Torito" &&
+    $3 == "boot" &&
+    $4 == "img" &&
+    $5 == ":" {
+
+      if ($7 == "BIOS" && $8 == "y")
+        bios = 1
+
+      if ($7 == "UEFI" && $8 == "y")
+        uefi = 1
+    }
+
+    $1 == "MBR" &&
+    $2 == "partition" &&
+    $3 == ":" &&
+    tolower($6) == "0xef" {
+      uefi = 1
+    }
+
+    $1 == "GPT" &&
+    $2 == "type" &&
+    $3 == "GUID" &&
+    $4 == ":" &&
+    tolower($6) == "28732ac11ff8d211ba4b00a0c93ec93b" {
+      uefi = 1
+    }
+
+    END {
+      if (bios && !uefi)
+        exit 0
+
+      if (uefi)
+        exit 1
+
+      exit 3
+    }
+  ' <<< "$result"
+}
+
+readQcow2Sectors() {
+
+  local file="$1"
+  local skip="$2"
+  local count="$3"
+  local output="$4"
+
+  rm -f "$output"
+
+  if ! qemu-img dd \
+      -f qcow2 \
+      -O raw \
+      bs=512 \
+      skip="$skip" \
+      count="$((skip + count))" \
+      "if=$file" \
+      "of=$output" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  return 0
+}
+
+detectQcow2Mode() {
+
+  local file="$1"
+  local found="N"
+  local protective="N"
+  local tmp type offset
+  local signature actual_size
+
+  local entry_lba
+  local entry_count
+  local entry_size
+
+  if ! tmp=$(mktemp "$QEMU_DIR/boot-mode.XXXXXX"); then
+    error "Failed to create temporary boot detection file!"
+    return 1
+  fi
+
+  # Inspect only the raw sectors needed for MBR/GPT detection instead of
+  # converting or mounting the complete QCOW2 image.
+  if ! readQcow2Sectors "$file" 0 2 "$tmp"; then
+    rm -f "$tmp"
+    error "Failed to inspect QCOW2 image!"
+    return 1
+  fi
+
+  if ! actual_size=$(stat -c%s -- "$tmp"); then
+    rm -f "$tmp"
+    error "Failed to determine QCOW2 inspection data size!"
+    return 1
+  fi
+
+  if (( actual_size < 1024 )); then
+    rm -f "$tmp"
+    error "QCOW2 image is too small to contain a partition table!"
+    return 1
+  fi
+
+  if ! signature=$(xxd -p -l 2 -s 510 "$tmp"); then
+    rm -f "$tmp"
+    error "Failed to inspect QCOW2 partition table!"
+    return 1
+  fi
+
+  # Check the four MBR partition type fields.
+  if [[ "$signature" == "55aa" ]]; then
+
+    for offset in 450 466 482 498; do
+
+      if ! type=$(xxd -p -l 1 -s "$offset" "$tmp"); then
+        rm -f "$tmp"
+        error "Failed to inspect QCOW2 partition table!"
+        return 1
+      fi
+
+      case "$type" in
+        "ef" )
+          found="Y"
+          break
+          ;;
+        "ee" )
+          protective="Y"
+          ;;
+      esac
+
+    done
+  fi
+
+  if [[ "$found" != "Y" ]]; then
+
+    if ! signature=$(xxd -p -l 8 -s 512 "$tmp"); then
+      rm -f "$tmp"
+      error "Failed to inspect QCOW2 partition table!"
+      return 1
+    fi
+
+    if [[ "$signature" != "4546492050415254" ]]; then
+
+      if [[ "$protective" == "Y" ]]; then
+        rm -f "$tmp"
+        warn "Protective MBR found but the GPT header in \"$file\" is invalid, keeping UEFI mode."
+        return 0
+      fi
+
+    else
+
+      entry_lba=$(od -An -tu8 -j 584 -N 8 "$tmp" | tr -d '[:space:]') || {
+        rm -f "$tmp"
+        error "Failed to read GPT header!"
+        return 1
+      }
+
+      entry_count=$(od -An -tu4 -j 592 -N 4 "$tmp" | tr -d '[:space:]') || {
+        rm -f "$tmp"
+        error "Failed to read GPT header!"
+        return 1
+      }
+
+      entry_size=$(od -An -tu4 -j 596 -N 4 "$tmp" | tr -d '[:space:]') || {
+        rm -f "$tmp"
+        error "Failed to read GPT header!"
+        return 1
+      }
+
+      if [[ ! "$entry_lba" =~ ^[0-9]+$ ||
+            ! "$entry_count" =~ ^[0-9]+$ ||
+            ! "$entry_size" =~ ^[0-9]+$ ]]; then
+        rm -f "$tmp"
+        error "Invalid GPT header!"
+        return 1
+      fi
+
+      local entry_units=$((entry_size / 128))
+
+      if (( entry_lba < 2 ||
+            entry_count < 1 ||
+            entry_count > 131072 ||
+            entry_size < 128 ||
+            entry_size > 4096 ||
+            entry_size % 128 != 0 ||
+            (entry_units & (entry_units - 1)) != 0 )); then
+        rm -f "$tmp"
+        error "Invalid GPT partition entry array!"
+        return 1
+      fi
+
+      local table_size=$((entry_count * entry_size))
+
+      # Protect against corrupt images requesting an excessive read.
+      if (( table_size > 16777216 )); then
+        rm -f "$tmp"
+        error "GPT partition entry array is too large!"
+        return 1
+      fi
+
+      local table_sectors=$(((table_size + 511) / 512))
+      local expected_size=$((table_sectors * 512))
+
+      if ! readQcow2Sectors \
+          "$file" "$entry_lba" "$table_sectors" "$tmp"; then
+        rm -f "$tmp"
+        error "Failed to read GPT partition entries!"
+        return 1
+      fi
+
+      if ! actual_size=$(stat -c%s -- "$tmp"); then
+        rm -f "$tmp"
+        error "Failed to determine GPT partition entry data size!"
+        return 1
+      fi
+
+      if (( actual_size < expected_size )); then
+        rm -f "$tmp"
+        error "Failed to read the complete GPT partition entry array!"
+        return 1
+      fi
+
+      # EFI System Partition GUID in GPT on-disk byte order.
+      if xxd -p -c 16 -l "$table_size" "$tmp" |
+          awk -v stride="$((entry_size / 16))" '
+            (NR - 1) % stride == 0 &&
+              tolower($0) == "28732ac11ff8d211ba4b00a0c93ec93b" {
+              found = 1
+            }
+            END {
+              exit !found
+            }
+          '; then
+
+        found="Y"
+
+      fi
+    fi
+  fi
+
+  rm -f "$tmp"
+
+  if [[ "$found" != "Y" ]]; then
+    info "No EFI partition detected in \"$file\", using legacy boot."
+    BOOT_MODE="legacy"
+  fi
+
+  return 0
+}
+
+detectDiskMode() {
+
+  local file="$1"
+
+  case "${file,,}" in
+    *".qcow2" ) detectQcow2Mode "$file" || return 1 ;;
+    * ) detectRawDiskMode "$file" || return 1 ;;
+  esac
+
+  return 0
+}
+
+detectType() {
+
+  local file="$1"
+
+  [ ! -s "$file" ] && return 1
+
+  case "${file,,}" in
+    *".iso" | *".img" | *".raw" | *".qcow2" ) ;;
+    * ) return 1 ;;
+  esac
+
+  # Automatic firmware detection is performed only when the user has not chosen
+  # a boot mode explicitly.
+  if [ -z "$BOOT_MODE" ]; then
+    if [[ "${file,,}" != *".iso" ]]; then
+
+      detectDiskMode "$file" || return 1
+
+    else
+
+      if isLegacyIso "$file"; then
+
+        info "No UEFI boot entry detected in \"$file\", using legacy boot."
+        BOOT_MODE="legacy"
+
+      else
+
+        local rc=$?
+
+        case "$rc" in
+          1 ) ;; # Confirmed UEFI support
+          3 ) warn "Could not determine the boot mode of \"$file\", keeping UEFI mode." ;;
+          * ) return 1 ;;
+        esac
+
+      fi
+    fi
+  fi
+
+  bootFile "$file" && return 0
+  return 1
+}
+
+downloadFile() {
+
+  local url="$1"
+  local base="$2"
+  local name="$3"
+  local expected="${4:-0}"
+  local connections="${5:-1}"
+  local dest="$STORAGE/$base"
+
+  if [ -z "$name" ]; then
+    local msg="Downloading image"
+    info "Downloading $base..."
+  else
+    local msg="Downloading $name"
+    info "Downloading $name..."
+  fi
+
+  downloadToFile \
+    "$url" \
+    "$dest" \
+    "$msg" \
+    "$expected" \
+    "$connections" \
+    "Y"
+}
+
+convertImage() {
+
+  local source_file=$1
+  local source_fmt=$2
+  local dst_file=$3
+  local dst_fmt=$4
+  local dir base fs fa space space_gb
+  local cur_size cur_gb src_size
+
+  [ -f "$dst_file" ] && error "Conversion failed, destination file $dst_file already exists?" && return 1
+  [ ! -f "$source_file" ] && error "Conversion failed, source file $source_file does not exists?" && return 1
+
+  if [[ "${source_fmt,,}" == "${dst_fmt,,}" ]]; then
+    if ! mv -f "$source_file" "$dst_file"; then
+      error "Failed to move converted image to $dst_file."
+      return 1
+    fi
+    return 0
+  fi
+
+  # Convert beside the destination and publish it only after qemu-img completes;
+  # the original source remains available throughout the conversion.
+  local tmp_file="$dst_file.tmp"
+  dir=$(dirname "$tmp_file")
+
+  rm -f "$tmp_file"
+
+  if [ -n "$ALLOCATE" ] && ! disabled "$ALLOCATE"; then
+
+    # Check free diskspace
+    if ! src_size=$(qemu-img info "$source_file" -f "$source_fmt" | grep '^virtual size: ' | sed 's/.*(\(.*\) bytes)/\1/'); then
+      error "Failed to determine virtual size of $source_file."
+      return 1
+    fi
+
+    if ! space=$(df --output=avail -B 1 "$dir" | tail -n 1); then
+      error "Failed to check free space in $dir."
+      return 1
+    fi
+
+    if (( src_size > space )); then
+      space_gb=$(formatBytes "$space")
+      error "Insufficient free disk space to convert image in $dir, it has only $space_gb available..."
+      return 1
+    fi
+  fi
+
+  base=$(basename "$source_file")
+  info "Converting $base..."
+  html "Converting image..."
+
+  local conv_flags="-p"
+
+  if [ -z "$ALLOCATE" ] || disabled "$ALLOCATE"; then
+    local disk_param="preallocation=off"
+  else
+    local disk_param="preallocation=falloc"
+  fi
+
+  if ! fs=$(stat -f -c %T "$dir"); then
+    error "Failed to determine filesystem type of $dir."
+    return 1
+  fi
+
+  [[ "${fs,,}" == "btrfs" ]] && disk_param+=",nocow=on"
+
+  if [[ "$dst_fmt" != "raw" ]]; then
+    if [ -z "$ALLOCATE" ] || disabled "$ALLOCATE"; then
+      conv_flags+=" -c"
+    fi
+    [ -n "${DISK_FLAGS:-}" ] && disk_param+=",$DISK_FLAGS"
+  fi
+
+  # shellcheck disable=SC2086
+  if ! qemu-img convert -f "$source_fmt" $conv_flags -o "$disk_param" -O "$dst_fmt" -- "$source_file" "$tmp_file"; then
+    rm -f "$tmp_file"
+    error "Failed to convert image in $dir, is there enough space available?"
+    return 1
+  fi
+
+  if [[ "$dst_fmt" == "raw" ]]; then
+    if [ -n "$ALLOCATE" ] && ! disabled "$ALLOCATE"; then
+      # Work around qemu-img bug
+      if ! cur_size=$(stat -c%s "$tmp_file"); then
+        error "Failed to determine size of converted image $tmp_file."
+        rm -f "$tmp_file"
+        return 1
+      fi
+      if ! cur_gb=$(formatBytes "$cur_size"); then
+        cur_gb="$cur_size bytes"
+      fi
+      if ! fallocate -l "$cur_size" "$tmp_file" &>/dev/null; then
+        if ! fallocate -l -x "$cur_size" "$tmp_file"; then
+          error "Failed to allocate $cur_gb for image!"
+        fi
+      fi
+    fi
+  fi
+
+  if ! mv "$tmp_file" "$dst_file"; then
+    error "Failed to move converted image to $dst_file."
+    return 1
+  fi
+
+  if ! rm -f "$source_file"; then
+    error "Failed to remove old image $source_file."
+    return 1
+  fi
+
+  if [[ "${fs,,}" == "btrfs" ]]; then
+    fa=$(lsattr "$dst_file")
+    if [[ "$fa" != *"C"* ]]; then
+      error "Failed to disable COW for image on ${fs^^} filesystem!"
+    fi
+  fi
+
+  return 0
+}
+
+findFile() {
+
+  local dir file
+  local base="$1"
+  local ext="$2"
+  local fname="${base}.${ext}"
+
+  dir=$(find / -maxdepth 1 -type d -iname "$fname" -print -quit)
+  [ ! -d "$dir" ] && dir=$(find "$STORAGE" -maxdepth 1 -type d -iname "$fname" -print -quit)
+
+  # A directory at a file bind path usually means the host source did not exist
+  # when the container runtime created the mount point.
+  if [ -d "$dir" ] && ! hasData; then
+    error "The path $dir maps to a file that does not exist!"
+    exit 37
+  fi
+
+  file=$(find / -maxdepth 1 -type f -iname "$fname" -print -quit)
+  [ ! -s "$file" ] && file=$(find "$STORAGE" -maxdepth 1 -type f -iname "$fname" -print -quit)
+  [ ! -s "$file" ] && return 1
+
+  detectType "$file" && return 0
+
+  return 1
+}
+
+findBootFile() {
+
+  findFile "boot" "img" && return 0
+  findFile "boot" "raw" && return 0
+  findFile "boot" "iso" && return 0
+  findFile "boot" "qcow2" && return 0
+  findFile "custom" "iso" && return 0
+
+  return 1
+}
+
+findArchiveImage() {
+
+  local tmp="$1"
+  local base="$2"
+  local img=""
+  local ext
+  local exts=( iso img raw qcow2 vdi vhd vhdx vmdk )
+
+  case "${base%.*}" in
+    *".iso" | *".img" | *".raw" | *".qcow2" | *".vdi" | *".vhd" | *".vhdx" | *".vmdk" )
+      if [ -s "$tmp/${base%.*}" ]; then
+        img="$tmp/${base%.*}"
+      fi
+      ;;
+  esac
+
+  # Prefer the archive member matching the archive basename before falling back
+  # to the first supported image found anywhere in the extracted tree.
+  if [ -z "$img" ]; then
+    for ext in "${exts[@]}"; do
+      if [ -s "$tmp/${base%.*}.$ext" ]; then
+        img="$tmp/${base%.*}.$ext"
+        break
+      fi
+    done
+  fi
+
+  if [ -z "$img" ]; then
+    for ext in "${exts[@]}"; do
+      img=$(find "$tmp" -type f -size +0c -iname "*.$ext" -print -quit)
+      [ -n "$img" ] && break
+    done
+  fi
+
+  echo "$img"
+  return 0
+}
+
+verifyExtractedImage() {
+
+  local file="$1"
+  local fs attributes
+
+  if [ ! -f "$file" ] || [ ! -s "$file" ]; then
+    error "Extracted image $file is missing or empty."
+    return 1
+  fi
+
+  if ! fs=$(stat -f -c %T "$file"); then
+    error "Failed to determine filesystem type of $file."
+    return 1
+  fi
+
+  [[ "${fs,,}" != "btrfs" ]] && return 0
+
+  attributes=$(lsattr "$file" 2>/dev/null || :)
+  if [[ "$attributes" != *"C"* ]]; then
+    error "Failed to disable COW for extracted image $file on ${fs^^} filesystem."
+  fi
+
+  return 0
+}
+
+findBootFile && return 0
+
+# An existing non-empty data disk takes precedence over BOOT media; detect its
+# firmware requirements and start it directly.
+if hasData; then
+
+  if [ -z "$BOOT_MODE" ]; then
+
+    disk=$(getDisk) || {
+      error "Failed to locate data disk!"
+      exit 63
+    }
+
+    detectDiskMode "$disk" || exit 63
+  fi
+
+  BOOT="none"
+  return 0
+
+fi
+
+BOOT=$(strip "$BOOT")
+
+verifyFnxvmDownload() {
+
+  local file="$1"
+  local method="${FNXVM_VERIFY_METHOD:-}"
+  local expected_sha="${FNXVM_CHECKSUM_VALUE:-}"
+  local checksum_url="${FNXVM_CHECKSUM_URL:-}"
+  local sig_url="${FNXVM_SIG_URL:-}"
+  local keyring="${FNXVM_GPG_KEYRING:-}"
+  local iso_name="${FNXVM_ISO_FILENAME:-$(basename -- "$file")}"
+  local actual_sha tmp_dir sums_file sig_file verified_sha
+
+  [ -z "$method" ] && return 0
+
+  tmp_dir=$(mktemp -d "$QEMU_DIR/verify.XXXXXX") || {
+    error "Failed to create temporary verification directory!"
+    return 1
+  }
+
+  cleanup_verify() { rm -rf -- "$tmp_dir"; }
+
+  case "$method" in
+    "sha256+gpg" )
+      if [ ! -s "$keyring" ]; then
+        cleanup_verify
+        error "GPG keyring '$keyring' is missing; failing closed!"
+        return 1
+      fi
+
+      if [[ "$sig_url" == *".sign" || "$sig_url" == *".gpg" ]]; then
+        sums_file="$tmp_dir/SHA256SUMS"
+        sig_file="$tmp_dir/SHA256SUMS.sig"
+        info "Verifying vendor GPG signature on checksum manifest..."
+        html "Verifying vendor signature..."
+        if ! curl -fsSL --max-time 30 "$checksum_url" -o "$sums_file" || \
+           ! curl -fsSL --max-time 30 "$sig_url" -o "$sig_file"; then
+          cleanup_verify
+          error "Failed to download checksum manifest or GPG signature; failing closed!"
+          return 1
+        fi
+        if ! gpgv --keyring "$keyring" "$sig_file" "$sums_file" >/dev/null 2>&1; then
+          cleanup_verify
+          error "GPG signature verification FAILED for $checksum_url; refusing to boot!"
+          return 1
+        fi
+        verified_sha=$(awk -v target="$iso_name" '
+          {
+            f = $2; sub(/^\*/, "", f);
+            if (f == target) { print tolower($1); exit }
+          }
+        ' "$sums_file")
+        if [ -z "$verified_sha" ]; then
+          cleanup_verify
+          error "ISO '$iso_name' not found in GPG-verified SHA256SUMS; failing closed!"
+          return 1
+        fi
+        expected_sha="$verified_sha"
+        info "GPG signature on SHA256SUMS verified successfully."
+      fi
+
+      info "Verifying SHA-256 checksum of $(basename -- "$file")..."
+      html "Verifying ISO checksum..."
+      actual_sha=$(sha256sum "$file" | awk '{print tolower($1)}')
+      if [ "$actual_sha" != "${expected_sha,,}" ]; then
+        cleanup_verify
+        error "SHA-256 mismatch for $file (got $actual_sha, expected ${expected_sha,,}); deleting corrupt file!"
+        rm -f -- "$file"
+        return 1
+      fi
+      info "SHA-256 checksum verified: $actual_sha"
+
+      if [[ "$sig_url" == *".iso.sig" ]]; then
+        sig_file="$tmp_dir/iso.sig"
+        info "Verifying detached vendor GPG signature on ISO..."
+        html "Verifying ISO signature..."
+        if ! curl -fsSL --max-time 30 "$sig_url" -o "$sig_file"; then
+          cleanup_verify
+          error "Failed to download detached GPG signature $sig_url; failing closed!"
+          rm -f -- "$file"
+          return 1
+        fi
+        if ! gpgv --keyring "$keyring" "$sig_file" "$file" >/dev/null 2>&1; then
+          cleanup_verify
+          error "Detached GPG signature verification FAILED for $file; deleting untrusted file!"
+          rm -f -- "$file"
+          return 1
+        fi
+        info "Detached GPG signature verified successfully."
+      fi
+      ;;
+
+    "sha256" )
+      if [ -z "$expected_sha" ]; then
+        cleanup_verify
+        error "Missing expected SHA-256 checksum; failing closed!"
+        rm -f -- "$file"
+        return 1
+      fi
+      info "Verifying SHA-256 checksum of $(basename -- "$file")..."
+      html "Verifying ISO checksum..."
+      actual_sha=$(sha256sum "$file" | awk '{print tolower($1)}')
+      if [ "$actual_sha" != "${expected_sha,,}" ]; then
+        cleanup_verify
+        error "SHA-256 mismatch for $file (got $actual_sha, expected ${expected_sha,,}); deleting corrupt file!"
+        rm -f -- "$file"
+        return 1
+      fi
+      info "SHA-256 checksum verified: $actual_sha"
+      ;;
+  esac
+
+  cleanup_verify
+  return 0
+}
+
+FNXVM_VERIFY_METHOD=""
+FNXVM_CHECKSUM_URL=""
+FNXVM_CHECKSUM_VALUE=""
+FNXVM_SIG_URL=""
+FNXVM_GPG_KEYRING=""
+FNXVM_ISO_FILENAME=""
+FNXVM_RESOLVED_NAME=""
+
+if [ -z "$BOOT" ] && [ -n "${FNXVM_OS:-}" ]; then
+  folder="${FNXVM_OS,,}"
+  [ "$folder" = "debian" ] && folder="debian-${FNXVM_DESKTOP:-gnome}"
+
+  if ! hasDisk; then
+    STORAGE="$STORAGE/$folder"
+    if [ -d "$STORAGE" ]; then
+      findBootFile && return 0
+      if hasData; then
+        if [ -z "$BOOT_MODE" ]; then
+          disk=$(getDisk) || { error "Failed to locate data disk!"; exit 63; }
+          detectDiskMode "$disk" || exit 63
+        fi
+        BOOT="none"
+        return 0
+      fi
+    fi
+  fi
+
+  msg="Resolving latest official ${FNXVM_OS} release..."
+  info "$msg" && html "$msg"
+
+  resolved_json=$(/usr/local/bin/fnxvm-resolve --json "$FNXVM_OS" --desktop "${FNXVM_DESKTOP:-gnome}") || exit 34
+  BOOT=$(jq -r '.iso_url' <<< "$resolved_json")
+  FNXVM_RESOLVED_NAME="$(jq -r '"\(.guest) \(.version)"' <<< "$resolved_json")"
+  FNXVM_VERIFY_METHOD=$(jq -r '.verify_method // ""' <<< "$resolved_json")
+  FNXVM_CHECKSUM_URL=$(jq -r '.checksum_url // ""' <<< "$resolved_json")
+  FNXVM_CHECKSUM_VALUE=$(jq -r '.checksum_value // ""' <<< "$resolved_json")
+  FNXVM_SIG_URL=$(jq -r '.signature_url // ""' <<< "$resolved_json")
+  FNXVM_GPG_KEYRING=$(jq -r '.gpg_keyring // ""' <<< "$resolved_json")
+  FNXVM_ISO_FILENAME=$(jq -r '.iso_filename // ""' <<< "$resolved_json")
+  info "Resolved ${FNXVM_RESOLVED_NAME}: ${BOOT}"
+fi
+
+if [ -z "$BOOT" ] || [[ "$BOOT" == *"example.com/"* ]]; then
+
+  BOOT="alpine"
+  warn "no value specified for the BOOT variable, defaulting to \"${BOOT}\"."
+
+fi
+
+if ! hasDisk && [ -z "$FNXVM_RESOLVED_NAME" ]; then
+
+  # When no managed disk exists yet, namespace storage by the requested image so
+  # multiple BOOT choices can coexist without overwriting each other.
+  folder=$(getFolder "$BOOT")
+  STORAGE="$STORAGE/$folder"
+
+  if [ -d "$STORAGE" ]; then
+
+    findBootFile && return 0
+
+    if hasData; then
+
+      if [ -z "$BOOT_MODE" ]; then
+
+        disk=$(getDisk) || {
+          error "Failed to locate data disk!"
+          exit 63
+        }
+
+        detectDiskMode "$disk" || exit 63
+      fi
+
+      BOOT="none"
+      return 0
+
+    fi
+
+  fi
+fi
+
+if [ -n "$FNXVM_RESOLVED_NAME" ]; then
+  download_name="$FNXVM_RESOLVED_NAME"
+else
+  name=$(getURL "$BOOT" "name") || exit 34
+  download_name="$name"
+
+  if [ -n "$name" ]; then
+
+    msg="Retrieving latest $name version..."
+    info "$msg" && html "$msg..."
+
+    result=$(getURL "$BOOT" "download") || exit 34
+    IFS=$'\t' read -r url release <<< "$result"
+
+    [ -n "$url" ] && BOOT="$url"
+    [ -n "$release" ] && download_name+=" $release"
+
+  fi
+fi
+
+if [[ "$BOOT" != *"."* ]]; then
+  if [ -z "$BOOT" ]; then
+    error "No BOOT value specified!"
+  else
+    error "Invalid BOOT value specified, option \"$BOOT\" is not recognized!"
+  fi
+  exit 64
+fi
+
+case "${BOOT,,}" in
+  http://* | https://* ) ;;
+  * )
+    error "Invalid BOOT value specified, \"$BOOT\" is not a valid URL!"
+    exit 64 ;;
+esac
+
+if ! makeDir "$STORAGE"; then
+  error "Failed to create directory \"$STORAGE\" !" && exit 33
+fi
+
+find "$STORAGE" -maxdepth 1 -type f \( -iname '*.rom' -or -iname '*.vars' \) -delete
+find "$STORAGE" -maxdepth 1 -type f -iname 'qemu.*' -delete
+
+base=$(getBase "$BOOT")
+
+downloadRetry \
+  "$STORAGE/$base" \
+  "$CONNECTIONS" \
+  "5" \
+  "${download_name:-$base}" \
+  "100000" \
+  "$BOOT" \
+  "$base" \
+  "$download_name" \
+  "0" || exit 60
+
+if [ -n "$FNXVM_VERIFY_METHOD" ]; then
+  verifyFnxvmDownload "$STORAGE/$base" || exit 61
+fi
+
+case "${base,,}" in
+
+  *".gz" | *".gzip" | *".xz" | *".7z" | *".zip" | *".rar" | *".lzma" | *".bz" | *".bz2" )
+
+    info "Extracting $base..."
+    html "Extracting image..." ;;
+
+esac
+
+case "${base,,}" in
+
+  *".gz" | *".gzip" )
+
+    out="$STORAGE/${base%.*}"
+    tmp="$out.tmp"
+
+    if ! rm -f "$tmp"; then
+      error "Failed to remove temporary extraction file $tmp" && exit 32
+    fi
+
+    prepareNoCow "$tmp" || exit 32
+
+    if ! gzip -dc "$STORAGE/$base" > "$tmp"; then
+      rm -f "$tmp"
+      error "Failed to extract archive: $base" && exit 32
+    fi
+
+    if ! verifyExtractedImage "$tmp"; then
+      rm -f "$tmp"
+      error "Failed to verify extracted image from $base" && exit 32
+    fi
+
+    if ! mv -f "$tmp" "$out"; then
+      rm -f "$tmp"
+      error "Failed to move extracted image to $out" && exit 32
+    fi
+
+    verifyExtractedImage "$out" || exit 32
+
+    if ! rm -f "$STORAGE/$base"; then
+      error "Failed to remove archive: $base" && exit 32
+    fi
+
+    base="${base%.*}"
+    ;;
+
+  *".xz" )
+
+    out="$STORAGE/${base%.*}"
+    tmp="$out.tmp"
+
+    if ! rm -f "$tmp"; then
+      error "Failed to remove temporary extraction file $tmp" && exit 32
+    fi
+
+    prepareNoCow "$tmp" || exit 32
+
+    if ! xz -dc "$STORAGE/$base" > "$tmp"; then
+      rm -f "$tmp"
+      error "Failed to extract archive: $base" && exit 32
+    fi
+
+    if ! verifyExtractedImage "$tmp"; then
+      rm -f "$tmp"
+      error "Failed to verify extracted image from $base" && exit 32
+    fi
+
+    if ! mv -f "$tmp" "$out"; then
+      rm -f "$tmp"
+      error "Failed to move extracted image to $out" && exit 32
+    fi
+
+    verifyExtractedImage "$out" || exit 32
+
+    if ! rm -f "$STORAGE/$base"; then
+      error "Failed to remove archive: $base" && exit 32
+    fi
+
+    base="${base%.*}"
+    ;;
+
+  *".7z" | *".zip" | *".rar" | *".lzma" | *".bz" | *".bz2" )
+
+    archive="$base"
+    tmp="$STORAGE/extract"
+
+    if ! rm -rf "$tmp"; then
+      error "Failed to remove extraction directory \"$tmp\" !" && exit 32
+    fi
+
+    if ! makeDir "$tmp"; then
+      error "Failed to create directory \"$tmp\" !" && exit 33
+    fi
+
+    extractFs=$(stat -f -c %T "$tmp") || {
+      rm -rf "$tmp"
+      error "Failed to determine filesystem type of $tmp." && exit 32
+    }
+
+    if [[ "${extractFs,,}" == "btrfs" ]]; then
+      { chattr +C "$tmp"; } || :
+      extractAttrs=$(lsattr -d "$tmp" 2>/dev/null || :)
+      if [[ "$extractAttrs" != *"C"* ]]; then
+        error "Failed to disable COW for extraction directory $tmp on ${extractFs^^} filesystem."
+      fi
+    fi
+
+    if ! 7z x "$STORAGE/$base" -o"$tmp" > /dev/null; then
+      rm -rf "$tmp"
+      error "Failed to extract archive: $base" && exit 32
+    fi
+
+    img=$(findArchiveImage "$tmp" "$base")
+
+    if [ -z "$img" ] || ! verifyExtractedImage "$img"; then
+      rm -rf "$tmp"
+      error "Cannot find a valid image file in archive: .${BOOT/*./}" && exit 32
+    fi
+
+    base=$(basename "$img")
+
+    if ! mv "$img" "$STORAGE/$base"; then
+      rm -rf "$tmp"
+      error "Failed to move extracted image to $STORAGE/$base" && exit 32
+    fi
+
+    verifyExtractedImage "$STORAGE/$base" || exit 32
+
+    # Remove the downloaded archive only after the extracted image has been
+    # validated and published successfully.
+    if ! rm -f "$STORAGE/$archive"; then
+      error "Failed to remove archive: $archive" && exit 32
+    fi
+
+    if ! rm -rf "$tmp"; then
+      error "Failed to remove extraction directory \"$tmp\" !" && exit 32
+    fi
+    ;;
+
+esac
+
+case "${base,,}" in
+
+  *".iso" | *".img" | *".raw" | *".qcow2" )
+
+    setOwner "$STORAGE/$base" || warn "failed to set the owner for \"$STORAGE/$base\" !"
+    detectType "$STORAGE/$base" && return 0
+    error "Cannot read file \"${base}\"" && exit 63 ;;
+
+esac
+
+# Native QEMU formats boot directly; foreign virtual-disk formats are converted
+# to the configured managed disk format before firmware detection.
+target_ext="img"
+target_fmt="${DISK_FMT:-raw}"
+target_fmt="${target_fmt,,}"
+[[ "$target_fmt" != "raw" ]] && target_ext="qcow2"
+
+case "${base,,}" in
+  *".vdi" ) source_fmt="vdi" ;;
+  *".vhd" ) source_fmt="vpc" ;;
+  *".vhdx" ) source_fmt="vhdx" ;;
+  *".vmdk" ) source_fmt="vmdk" ;;
+  * ) error "Unknown file extension, type \".${base/*./}\" is not recognized!" && exit 33 ;;
+esac
+
+dst="$STORAGE/${base%.*}.$target_ext"
+
+convertImage "$STORAGE/$base" "$source_fmt" "$dst" "$target_fmt" || exit 35
+
+base=$(basename "$dst")
+
+setOwner "$STORAGE/$base" || warn "failed to set the owner for \"$STORAGE/$base\" !"
+detectType "$STORAGE/$base" && return 0
+error "Cannot convert file \"${base}\"" && exit 36
+
+return 0

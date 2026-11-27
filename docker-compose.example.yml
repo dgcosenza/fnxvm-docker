@@ -1,0 +1,56 @@
+# Example Docker Compose configuration for FNXVM.
+# Maintainer: Daniel G. Cosenza from FNX Labs
+#
+# Select a guest OS with OS= (windows, haiku, freebsd, debian, ubuntu, omarchy)
+# or supply a custom image URL with BOOT=https://example.invalid/custom.iso.
+#
+# Security note: Bind the web viewer (8006), VNC (5900), and RDP (3389) to
+# 127.0.0.1 or place them behind an authenticating reverse proxy; do not expose
+# an unprotected console directly to the public Internet.
+
+services:
+  fnxvm:
+    image: dgcosenza/fnxvm:latest
+    container_name: fnxvm
+    environment:
+      # Supported OS values: debian | ubuntu | freebsd | haiku | omarchy | windows
+      OS: "debian"
+      # For OS=debian: gnome (default) or kde
+      DESKTOP: "gnome"
+      # For OS=windows: any dockur/windows VERSION (e.g. 11, 11l, 11i, 10, 2025)
+      # VERSION: "11"
+      # Protect the noVNC web viewer with HTTP Basic Auth (recommended)
+      PROTECT: "Y"
+      USERNAME: "vmadmin"
+      PASSWORD: "change-me-before-starting"
+      RAM_SIZE: "4G"
+      CPU_CORES: "2"
+      DISK_SIZE: "64G"
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:8006:8006"     # noVNC web viewer
+      - "127.0.0.1:5900:5900/tcp" # VNC
+      - "127.0.0.1:3389:3389/tcp" # RDP (Windows guests)
+    volumes:
+      - fnxvm_storage:/storage
+      # Optional shared folder (9p for Linux/BSD guests, Samba for Windows guests):
+      # - ./shared:/shared
+    stop_grace_period: 2m
+    restart: unless-stopped
+
+volumes:
+  fnxvm_storage:

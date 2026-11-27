@@ -1,0 +1,15 @@
+*.log
+*.sarif
+trivy-report*
+grype-report*
+sbom-*.json
+cve-diff*.json
+arch-meta-*.json
+versions-new.json
+upstream-changes.md
+.ci-in/
+.ci-meta/
+.rel/
+__pycache__/
+*.py[cod]
+.DS_Store

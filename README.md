@@ -242,8 +242,30 @@ CI starts the container on both `linux/amd64` and `linux/arm64`, waits until Doc
 | qemus/qemu | `7.50` |
 | Base OS | `Debian 13.8 (13.8-slim)` |
 | Architectures | `linux/amd64, linux/arm64` |
+| Uncompressed size (per arch) | `amd64: 170.8 MB, arm64: 906.4 MB` |
+| Last verified build (UTC) | `2026-11-27` |
+| Published multi-arch digest | `dgcosenza/fnxvm@sha256:4251572dd3ca54a7048d9aced6e0199b0d7ebe8d508fe5785b7aabe8bec03b6c` |
+| GHCR mirror | `ghcr.io/dgcosenza/fnxvm@sha256:4251572dd3ca54a7048d9aced6e0199b0d7ebe8d508fe5785b7aabe8bec03b6c` |
 | Supply chain | Cosign OIDC signed + SPDX & CycloneDX SBOM attestations + SLSA Build L3 provenance |
-| Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** |
+| Security gate (Trivy + Grype on SBOM) | **0 fixable findings of any severity** (68 upstream-unfixed C/H) |
+
+**Guest OS versions resolved at last build (resolved dynamically at runtime):**
+
+| `OS` | Resolved Guest Version |
+| --- | --- |
+| `windows` | `Windows 11 (win11x64, build 26100.4349)` |
+| `haiku` | `R1/beta6 (amd64)` |
+| `freebsd` | `15.1-RELEASE` |
+| `debian` | `13.8.0 (GNOME / KDE)` |
+| `ubuntu` | `26.04.1 LTS` |
+| `omarchy` | `4.5.0 (rolling, no LTS)` |
+
+**Recent upstream tracking:**
+- **dockur/windows:** `6.06` -> `6.06`
+- **qemus/qemu:** `7.50` -> `7.50`
+- **Base image:** `debian:13.8-slim` pinned at `sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0`
+- **Go builder:** `golang:1.27.4-trixie` pinned at `sha256:430985542100b871e108ccc00e8dcc5eef08ca14ee5825e98ebf563d8ffec4ee`
+- `windows`: `Windows 11 (win11x64, build 26100.4349)`
 <!-- versions:end -->
 
 ## Upgrade / migration
